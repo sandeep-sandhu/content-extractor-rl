@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "article-extractor"
+version = "0.1.0"
+description = "RL-based article extraction from HTML"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["article", "extraction", "machine-learning", "nlp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+]
+
+[project.urls]
+repository = "https://github.com/yourusername/article-extractor"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "article_extractor._rs"
