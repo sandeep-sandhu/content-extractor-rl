@@ -1,13 +1,24 @@
 use crate::{
-    Config, DQNAgent, ArticleExtractionEnvironment, BaselineExtractor,
-    PrioritizedReplayBuffer, SiteProfileMemory, ImprovedRewardCalculator,
-    CurriculumManager, Result,
+    Config, DQNAgent, ArticleExtractionEnvironment, BaselineExtractor, ExtractionError,
 };
+
+use crate::{
+    replay_buffer::PrioritizedReplayBuffer,
+    SiteProfileMemory,
+    reward::ImprovedRewardCalculator,
+    curriculum::CurriculumManager,
+    Result,
+};
+
 use crate::environment::StepInfo;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 use tracing::{info, warn};
 use crate::{Checkpoint, CheckpointManager};
+use candle_core::DType;
+use candle_nn::VarBuilder;
+use candle_core::Device;
+// use crate::device::{get_device, get_device_info};
 
 /// Training metrics
 #[derive(Debug, Clone)]
@@ -37,6 +48,10 @@ pub fn train_standard(
 ) -> Result<(DQNAgent, TrainingMetrics)> {
     info!("Starting standard training for {} episodes", config.num_episodes);
 
+    // Initialize device and varbuilder
+    let device = Device::Cpu;
+    let vb = VarBuilder::zeros(DType::F32, &device);
+
     // Initialize components
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
     let mut site_memory = SiteProfileMemory::new(&config.site_profiles_dir)?;
@@ -50,8 +65,10 @@ pub fn train_standard(
         config.state_dim,
         config.num_discrete_actions,
         config.num_continuous_params,
+        config.gamma as f32,
         config.learning_rate,
-        config.gamma,
+        &device,
+        vb.clone(),
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor, config.clone());
@@ -65,7 +82,7 @@ pub fn train_standard(
     // Try to resume from checkpoint
     let start_episode = if let Some(checkpoint) = checkpoint_manager.load_latest()? {
         info!("Resuming from checkpoint at episode {}", checkpoint.episode);
-        epsilon = checkpoint.epsilon;
+        epsilon = checkpoint.epsilon as f64;
         metrics.best_avg_quality = checkpoint.best_quality;
 
         // Load model
@@ -93,7 +110,97 @@ pub fn train_standard(
     );
 
     for episode in start_episode..config.num_episodes {
-        // [Previous training loop code...]
+        // Sample HTML
+        let idx = episode % html_samples.len();
+        let (html, url) = &html_samples[idx];
+
+        let domain = url::Url::parse(url)
+            .ok()
+            .and_then(|u| u.host_str().map(|h| h.to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let site_profile = site_memory.get_profile(&domain);
+
+        // Reset environment
+        let mut state = env.reset(html, url.clone(), Some(site_profile))?;
+
+        let mut episode_reward = 0.0;
+        let mut done = false;
+        let mut step_info = StepInfo {
+            quality_score: 0.0,
+            text: String::new(),
+            xpath: String::new(),
+            parameters: std::collections::HashMap::new(),
+            step_count: 0,
+        };
+
+        // Episode loop
+        while !done {
+            let action = agent.select_action(&state, epsilon as f32)?;
+            let (next_state, reward, is_done, info) = env.step(action.clone())?;
+
+            episode_reward += reward;
+            done = is_done;
+            step_info = info;
+
+            // Store experience
+            let experience = crate::replay_buffer::Experience {
+                state: state.clone(),
+                action,
+                reward,
+                next_state: next_state.clone(),
+                done,
+            };
+            replay_buffer.add(experience);
+
+            // Training step
+            if replay_buffer.len() > config.batch_size * 10 {
+                let loss = agent.train_step(&mut replay_buffer, config.batch_size)?;
+                metrics.episode_losses.push(loss);
+            }
+
+            state = next_state;
+        }
+
+        // Update site profile
+        let profile = site_memory.get_profile(&domain);
+        let extraction_result = crate::site_profile::ExtractionResult {
+            text: step_info.text.clone(),
+            xpath: step_info.xpath.clone(),
+            quality_score: step_info.quality_score,
+            parameters: step_info.parameters.clone(),
+        };
+        profile.add_extraction(extraction_result);
+
+        // Decay epsilon
+        epsilon *= config.epsilon_decay;
+        epsilon = epsilon.max(config.epsilon_end);
+
+        // Update target network
+        if episode % config.target_update_freq == 0 {
+            agent.update_target_network();
+        }
+
+        // Record metrics
+        metrics.episode_rewards.push(episode_reward);
+        metrics.episode_qualities.push(step_info.quality_score);
+
+        // Update progress bar
+        if episode % 10 == 0 {
+            let avg_reward = if metrics.episode_rewards.len() >= 100 {
+                metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
+                    .iter()
+                    .sum::<f32>() / 100.0
+            } else {
+                episode_reward
+            };
+
+            pb.set_message(format!(
+                "Reward: {:.3}, Quality: {:.3}",
+                avg_reward, step_info.quality_score
+            ));
+        }
+        pb.inc(1);
 
         // Save checkpoint every 1000 episodes
         if episode % 1000 == 0 && episode > 0 {
@@ -118,11 +225,11 @@ pub fn train_standard(
 
             let checkpoint = Checkpoint::new(
                 episode,
-                agent.step_count,
+                agent.get_step_count(),
                 avg_reward,
                 avg_quality,
                 metrics.best_avg_quality,
-                epsilon,
+                epsilon as f32,
                 checkpoint_path,
             );
 
@@ -130,8 +237,6 @@ pub fn train_standard(
             site_memory.save_all()?;
             info!("Saved checkpoint at episode {}", episode);
         }
-
-        // [Rest of training loop...]
     }
 
     pb.finish_with_message("Training completed");
@@ -144,11 +249,11 @@ pub fn train_standard(
     // Save final checkpoint
     let final_checkpoint = Checkpoint::new(
         config.num_episodes,
-        agent.step_count,
+        agent.get_step_count(),
         metrics.episode_rewards.last().copied().unwrap_or(0.0),
         metrics.episode_qualities.last().copied().unwrap_or(0.0),
         metrics.best_avg_quality,
-        epsilon,
+        epsilon as f32,
         final_path,
     );
     checkpoint_manager.save_checkpoint(&final_checkpoint)?;
@@ -166,6 +271,10 @@ pub fn train_with_improvements(
 ) -> Result<(DQNAgent, TrainingMetrics)> {
     info!("Starting improved training for {} episodes", config.num_episodes);
 
+    // Initialize device and varbuilder
+    let device = Device::Cpu;
+    let vb = VarBuilder::zeros(DType::F32, &device);
+
     // Initialize components
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
     let mut site_memory = SiteProfileMemory::new(&config.site_profiles_dir)?;
@@ -179,8 +288,10 @@ pub fn train_with_improvements(
         config.state_dim,
         config.num_discrete_actions,
         config.num_continuous_params,
+        config.gamma as f32,
         config.learning_rate,
-        config.gamma,
+        &device,
+        vb.clone(),
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor.clone(), config.clone());
@@ -243,7 +354,7 @@ pub fn train_with_improvements(
 
         // Episode loop
         while !done {
-            let action = agent.select_action(&state, epsilon)?;
+            let action = agent.select_action(&state, epsilon as f32)?;
             let (next_state, _, is_done, info) = env.step(action.clone())?;
 
             // Calculate improved reward
@@ -284,8 +395,8 @@ pub fn train_with_improvements(
 
         // Decay epsilon (exponential)
         let progress = (episode as f32 / 2000.0).min(1.0);
-        epsilon = config.epsilon_start as f32 * (config.epsilon_end as f32 / config.epsilon_start as f32).powf(progress);
-        epsilon = epsilon.max(config.epsilon_end as f32);
+        epsilon = config.epsilon_start * (config.epsilon_end / config.epsilon_start).powf(progress as f64);
+        epsilon = epsilon.max(config.epsilon_end);
 
         // Update target network
         if episode % config.target_update_freq == 0 {
@@ -353,10 +464,14 @@ pub fn train_with_improvements(
 pub fn save_training_plot(metrics: &TrainingMetrics, output_path: &Path) -> Result<()> {
     use plotters::prelude::*;
 
-    let root = BitMapBackend::new(output_path, (1200, 800)).into_drawing_area();
-    root.fill(&WHITE)?;
+    let root = BitMapBackend::new(output_path, (1200, 800))
+        .into_drawing_area();
+    root.fill(&WHITE)
+        .map_err(|e| ExtractionError::ModelError(format!("Plot error: {}", e)))?;
 
-    let (upper, lower) = root.split_evenly(2);
+    let areas = root.split_evenly((2, 1));
+    let upper = &areas[0];
+    let lower = &areas[1];
 
     // Plot rewards
     let max_episodes = metrics.episode_rewards.len();
@@ -367,38 +482,46 @@ pub fn save_training_plot(metrics: &TrainingMetrics, output_path: &Path) -> Resu
         .copied()
         .fold(f32::INFINITY, f32::min);
 
-    let mut chart = ChartBuilder::on(&upper)
+    let mut chart = ChartBuilder::on(upper)
         .caption("Episode Rewards", ("sans-serif", 30))
         .margin(10)
         .x_label_area_size(30)
         .y_label_area_size(40)
-        .build_cartesian_2d(0..max_episodes, min_reward..max_reward)?;
+        .build_cartesian_2d(0..max_episodes, min_reward..max_reward)
+        .map_err(|e| ExtractionError::ModelError(format!("Chart error: {}", e)))?;
 
-    chart.configure_mesh().draw()?;
+    chart.configure_mesh()
+        .draw()
+        .map_err(|e| ExtractionError::ModelError(format!("Mesh error: {}", e)))?;
 
     chart.draw_series(LineSeries::new(
         metrics.episode_rewards.iter().enumerate().map(|(i, &r)| (i, r)),
         &BLUE,
-    ))?;
+    ))
+        .map_err(|e| ExtractionError::ModelError(format!("Series error: {}", e)))?;
 
     // Plot qualities
     let max_quality = metrics.episode_qualities.iter()
         .copied()
         .fold(f32::NEG_INFINITY, f32::max);
 
-    let mut chart2 = ChartBuilder::on(&lower)
+    let mut chart2 = ChartBuilder::on(lower)
         .caption("Episode Quality", ("sans-serif", 30))
         .margin(10)
         .x_label_area_size(30)
         .y_label_area_size(40)
-        .build_cartesian_2d(0..max_episodes, 0.0..max_quality)?;
+        .build_cartesian_2d(0..max_episodes, 0.0..max_quality)
+        .map_err(|e| ExtractionError::ModelError(format!("Chart error: {}", e)))?;
 
-    chart2.configure_mesh().draw()?;
+    chart2.configure_mesh()
+        .draw()
+        .map_err(|e| ExtractionError::ModelError(format!("Mesh error: {}", e)))?;
 
     chart2.draw_series(LineSeries::new(
         metrics.episode_qualities.iter().enumerate().map(|(i, &q)| (i, q)),
         &GREEN,
-    ))?;
+    ))
+        .map_err(|e| ExtractionError::ModelError(format!("Series error: {}", e)))?;
 
     root.present().map_err(|e| crate::ExtractionError::IoError(
         std::io::Error::new(std::io::ErrorKind::Other, e.to_string())

@@ -1,4 +1,4 @@
-use scraper::{Html, ElementRef};
+use scraper::{Html};
 use crate::baseline_extractor::BaselineExtractor;
 use crate::html_parser::HtmlParser;
 use crate::text_utils::TextUtils;
@@ -121,7 +121,7 @@ impl ArticleExtractionEnvironment {
     }
 
     /// Extract text using parameters
-    fn extract_with_params(&self, params: &[f32]) -> Result<String> {
+    fn extract_with_params(&self, _params: &[f32]) -> Result<String> {
         // Simplified extraction using parameters
         if let Some(document) = &self.document {
             if let Some(idx) = self.current_node_idx {
@@ -159,7 +159,7 @@ impl ArticleExtractionEnvironment {
 
         // Global document features (12 dims)
         if let Some(document) = &self.document {
-            let all_text = document.root_element().text().collect::<String>();
+            let _all_text = document.root_element().text().collect::<String>();
 
             state.push(0.5); // Normalized features
             state.push(0.5);

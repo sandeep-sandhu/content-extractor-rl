@@ -1,5 +1,4 @@
 use rand::Rng;
-use ndarray::{Array1, Array2};
 use std::collections::VecDeque;
 
 /// Experience tuple
@@ -58,7 +57,7 @@ impl PrioritizedReplayBuffer {
             return None;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Calculate sampling probabilities
         let priorities: Vec<f32> = self.priorities[..self.buffer.len()]
@@ -74,7 +73,7 @@ impl PrioritizedReplayBuffer {
         let mut experiences = Vec::with_capacity(batch_size);
 
         for _ in 0..batch_size {
-            let r: f32 = rng.gen();
+            let r: f32 = rng.random();
             let mut cumsum = 0.0;
             let mut idx = 0;
 
@@ -95,7 +94,7 @@ impl PrioritizedReplayBuffer {
         let weights: Vec<f32> = indices.iter()
             .map(|&idx| {
                 let prob = probs[idx];
-                ((total * prob).powf(-self.beta as f32))
+                (total * prob).powf(-self.beta as f32)
             })
             .collect();
 

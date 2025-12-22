@@ -10,6 +10,7 @@ pub struct Config {
     pub model_path: Option<PathBuf>,
     pub site_profiles_dir: PathBuf,
     pub output_dir: PathBuf,
+    pub models_dir: PathBuf,
 
     // Training hyperparameters
     pub num_episodes: usize,
@@ -51,6 +52,10 @@ impl Default for Config {
                 .ok()
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from("./output")),
+            models_dir: std::env::var("ARTICLE_EXTRACTOR_MODELS_DIR")
+                .ok()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("./models")),
 
             num_episodes: 10000,
             batch_size: 256,
@@ -86,6 +91,7 @@ impl Config {
     pub fn setup_directories(&self) -> Result<()> {
         std::fs::create_dir_all(&self.site_profiles_dir)?;
         std::fs::create_dir_all(&self.output_dir)?;
+        std::fs::create_dir_all(&self.models_dir)?;
         Ok(())
     }
 

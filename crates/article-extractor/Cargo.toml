@@ -1,3 +1,5 @@
+# crates/article-extractor/Cargo.toml
+
 [package]
 name = "article-extractor"
 version.workspace = true
@@ -21,17 +23,42 @@ sha2.workspace = true
 rand.workspace = true
 rayon.workspace = true
 tracing.workspace = true
-tract-onnx = { version = "0.21", optional = true }
-tract-core = { version = "0.21", optional = true }
+plotters.workspace = true
+tract-onnx = { version = "0.22.0", optional = true }
+tract-core = { version = "0.22.0", optional = true }
 
 # Additional dependencies
-url = "2.5"
-lazy_static = "1.4"
+url = "2.5.7"
+lazy_static = "1.5.0"
 indicatif = "0.18.3"
+selectors = "0.33.0"
+bzip2.workspace = true
+rand_distr.workspace = true
+
+# Optional MLflow support
+trs-mlflow = { version = "0.6.7", optional = true }
+tokio = { version = "1.48.0", features = ["full"], optional = true }
+futures = { version = "0.3.31", optional = true }  # Made optional
 
 [dev-dependencies]
-tokio = { version = "1.36", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
+criterion = { version = "0.8.1", features = ["html_reports"] }
+tempfile = "3.23.0"
 
 [features]
 default = []
 onnx = ["tract-onnx", "tract-core"]
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+mlflow-rs = ["trs-mlflow", "tokio", "futures"]  # Added tokio and futures here
+
+[[bench]]
+name = "extraction_benchmark"
+harness = false
+
+[[bench]]
+name = "concurrency_benchmark"
+harness = false
+
+[[bench]]
+name = "memory_benchmark"
+harness = false

@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use crate::Result;
-use sha2::{Sha256, Digest};
+use sha2::Digest;
 
 /// Site profile storing historical extraction patterns
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,10 +194,18 @@ impl SiteProfileMemory {
 
 /// Hash domain name to create filename
 fn hash_domain(domain: &str) -> String {
+    use sha2::Sha256;
     let mut hasher = Sha256::new();
     hasher.update(domain.as_bytes());
     let result = hasher.finalize();
-    format!("{:x}", result)[..16].to_string()
+
+    // Convert hash bytes to hex string
+    result.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>()
+        .chars()
+        .take(16)
+        .collect()
 }
 
 #[cfg(test)]

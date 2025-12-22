@@ -6,6 +6,7 @@ use crate::Result;
 use std::collections::HashSet;
 
 /// Baseline article extractor using heuristics
+#[derive(Clone)]
 pub struct BaselineExtractor {
     stopwords: HashSet<String>,
 }
@@ -50,7 +51,7 @@ impl BaselineExtractor {
     }
 
     /// Get candidate nodes with scores
-    fn get_candidates(&self, document: &Html) -> Vec<(ElementRef, f64)> {
+    fn get_candidates<'a>(&self, document: &'a Html) -> Vec<(ElementRef<'a>, f64)> {
         let mut candidates = Vec::new();
 
         // Try different selectors
@@ -121,7 +122,6 @@ impl BaselineExtractor {
                     return false;
                 }
 
-                // Link density check (simplified)
                 true
             })
             .collect();
@@ -130,7 +130,7 @@ impl BaselineExtractor {
     }
 
     /// Get candidate nodes for environment
-    pub fn get_candidate_nodes(&self, document: &Html, top_k: usize) -> Vec<ElementRef> {
+    pub fn get_candidate_nodes<'a>(&self, document: &'a Html, top_k: usize) -> Vec<ElementRef<'a>> {
         self.get_candidates(document)
             .into_iter()
             .take(top_k)

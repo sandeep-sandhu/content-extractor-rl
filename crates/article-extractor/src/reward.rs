@@ -151,7 +151,8 @@ impl ImprovedRewardCalculator {
 
     /// Coherence reward
     fn coherence_reward(&self, text: &str) -> f32 {
-        let words: Vec<_> = text.to_lowercase().split_whitespace().collect();
+        let text_lower = text.to_lowercase();
+        let words: Vec<_> = text_lower.split_whitespace().collect();
         if words.len() < 10 {
             return 0.0;
         }

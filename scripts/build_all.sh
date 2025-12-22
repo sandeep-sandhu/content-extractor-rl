@@ -7,20 +7,31 @@ echo "=========================================="
 echo "Building Article Extractor"
 echo "=========================================="
 
+echo "Building with CUDA support..."
+
+# Check for CUDA
+if command -v nvcc &> /dev/null; then
+    echo "✅ CUDA compiler found: $(nvcc --version | head -n1)"
+else
+    echo "⚠️  nvcc not found. Install CUDA Toolkit from:"
+    echo "    https://developer.nvidia.com/cuda-downloads"
+    exit 1
+fi
+
 # Build Rust library
 echo "Building Rust core library..."
-cargo build --release
+cargo build --release --features cuda,mlflow-rs
 
 # Build CLI
 echo "Building CLI binary..."
-cargo build --release --bin article-extractor
+cargo build --release --bin article-extractor --features cuda,mlflow-rs
 
 # Build Python package
 echo "Building Python package..."
 cd crates/article-extractor-py
 
 # Build for current Python version
-maturin build --release
+maturin develop --release --features cuda
 
 # Optional: Build for multiple Python versions
 if [ "$BUILD_ALL_PYTHON" = "1" ]; then
@@ -28,7 +39,7 @@ if [ "$BUILD_ALL_PYTHON" = "1" ]; then
     for version in 3.8 3.9 3.10 3.11; do
         if command -v python$version &> /dev/null; then
             echo "Building for Python $version..."
-            maturin build --release --interpreter python$version
+            maturin build --release --interpreter python$version --features cuda
         fi
     done
 fi

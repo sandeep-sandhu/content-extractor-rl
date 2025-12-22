@@ -13,7 +13,7 @@ pub struct DuelingDQN {
     ln2: LayerNorm,
     fc3: Linear,
     ln3: LayerNorm,
-    dropout: f64,
+    dropout: f32,
 
     // Value stream
     value_fc1: Linear,
@@ -70,7 +70,7 @@ impl DuelingDQN {
             ln2,
             fc3,
             ln3,
-            dropout: 0.2,
+            dropout: 0.1,
             value_fc1,
             value_fc2,
             advantage_fc1,
@@ -117,13 +117,20 @@ impl DuelingDQN {
 
         // Combine: Q(s,a) = V(s) + (A(s,a) - mean(A(s,a)))
         let advantage_mean = advantages.mean_keepdim(1)?;
-        let q_values = (value.broadcast_add(&advantages)?.broadcast_sub(&advantage_mean)?)?;
+        let q_values = value
+            .broadcast_add(&advantages)?
+            .broadcast_sub(&advantage_mean)?;
 
         // Continuous parameters
         let param_mean = self.param_mean.forward(&features)?.tanh()?;
         let param_std = self.param_logstd.exp()?;
 
         Ok((q_values, param_mean, param_std))
+    }
+
+    pub fn vars(&self) -> Vec<candle_core::Var> {
+        // Collect all vars from the network
+        vec![] // Implement properly based on your Sequential structure
     }
 
     /// Get all model parameters
@@ -151,7 +158,7 @@ impl DuelingDQN {
         };
 
         // Collect all parameters
-        let mut params_dict: HashMap<String, Vec<f32>> = HashMap::new();
+        //let mut params_dict: HashMap<String, Vec<f32>> = HashMap::new();
 
         // Extract weights and biases from each layer
         // This is a simplified version - in production, you'd use proper ONNX export
@@ -219,7 +226,7 @@ impl DuelingDQN {
         // Create new model with loaded parameters
         let device = Device::Cpu;
         let vb = VarBuilder::zeros(DType::F32, &device);
-        let mut model = Self::new(state_dim, num_actions, num_params, vb)?;
+        let model = Self::new(state_dim, num_actions, num_params, vb)?;
 
         // Load parameters into model
         // In a real implementation, we would restore all tensor values here

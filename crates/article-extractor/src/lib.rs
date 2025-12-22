@@ -15,7 +15,14 @@ pub mod replay_buffer;
 pub mod reward;
 pub mod curriculum;
 pub mod training;
-pub mod hyperparameter;
+pub mod hyperparameter_tuner;
+pub mod evaluation;
+pub mod plotting;
+pub mod device;
+
+// Optional MLflow integration
+#[cfg(feature = "mlflow-rs")]
+pub mod mlflow;
 
 // Re-exports
 pub use config::Config;
@@ -24,11 +31,13 @@ pub use baseline_extractor::BaselineExtractor;
 pub use agent::DQNAgent;
 pub use environment::ArticleExtractionEnvironment;
 pub use training::{train_standard, train_with_improvements, TrainingMetrics};
-pub use hyperparameter::{HyperparameterSearch, GridSearchConfig};
+pub use hyperparameter_tuner::{TPEOptimizer, Hyperparameters, HyperparameterSpace, TrialResult};
+pub use evaluation::{GroundTruthData, GroundTruthEvaluator, EvaluationMetrics};
+pub use plotting::{TrainingPlotter, PlotConfig};
+pub use device::{get_device, cuda_is_available, get_device_info, print_device_info};
+
 pub mod checkpoint;
 pub use checkpoint::{Checkpoint, CheckpointManager};
-
-use thiserror::Error;
 
 #[cfg(feature = "onnx")]
 pub mod onnx_export;
@@ -36,32 +45,64 @@ pub mod onnx_export;
 #[cfg(feature = "onnx")]
 pub use onnx_export::OnnxModelExporter;
 
+#[cfg(feature = "mlflow-rs")]
+pub use mlflow::{MlflowTracker, create_tracker};
+
 /// Result type for article extraction operations
 pub type Result<T> = std::result::Result<T, ExtractionError>;
 
 /// Errors that can occur during article extraction
-#[derive(Error, Debug)]
+#[derive(Debug)]
 pub enum ExtractionError {
-    #[error("Failed to parse HTML: {0}")]
-    HtmlParseError(String),
-
-    #[error("Failed to extract article: {0}")]
-    ExtractionError(String),
-
-    #[error("Model error: {0}")]
+    IoError(std::io::Error),
+    ParseError(String),
+    NetworkError(String),
     ModelError(String),
+    ExtractionFailed(String),
+    CandleError(String),
+    RuntimeError(String),
+    MlflowError(String),
+}
 
-    #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+impl From<anyhow::Error> for ExtractionError {
+    fn from(err: anyhow::Error) -> Self {
+        ExtractionError::MlflowError(format!("{}", err))
+    }
+}
 
-    #[error("JSON error: {0}")]
-    JsonError(#[from] serde_json::Error),
+impl std::fmt::Display for ExtractionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExtractionError::IoError(e) => write!(f, "IO error: {}", e),
+            ExtractionError::ParseError(e) => write!(f, "Parse error: {}", e),
+            ExtractionError::NetworkError(e) => write!(f, "Network error: {}", e),
+            ExtractionError::ModelError(e) => write!(f, "Model error: {}", e),
+            ExtractionError::ExtractionFailed(e) => write!(f, "Extraction failed: {}", e),
+            ExtractionError::CandleError(e) => write!(f, "Candle error: {}", e),
+            ExtractionError::RuntimeError(e) => write!(f, "Runtime error: {}", e),
+            ExtractionError::MlflowError(e) => write!(f, "MLFlow error: {}", e),
+        }
+    }
+}
 
-    #[error("Configuration error: {0}")]
-    ConfigError(String),
+impl std::error::Error for ExtractionError {}
 
-    #[error("Training error: {0}")]
-    TrainingError(String),
+impl From<std::io::Error> for ExtractionError {
+    fn from(err: std::io::Error) -> Self {
+        ExtractionError::IoError(err)
+    }
+}
+
+impl From<serde_json::Error> for ExtractionError {
+    fn from(err: serde_json::Error) -> Self {
+        ExtractionError::ParseError(err.to_string())
+    }
+}
+
+impl From<candle_core::Error> for ExtractionError {
+    fn from(err: candle_core::Error) -> Self {
+        ExtractionError::CandleError(err.to_string())
+    }
 }
 
 /// Extracted article result

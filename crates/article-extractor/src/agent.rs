@@ -1,5 +1,5 @@
-use candle_core::{Device, Tensor, DType, Result as CandleResult};
-use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, ops::softmax, loss};
+use candle_core::{Device, Tensor, DType};
+use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap};
 use crate::models::DuelingDQN;
 use crate::replay_buffer::{PrioritizedReplayBuffer, SampledBatch};
 use crate::Result;
@@ -23,28 +23,24 @@ impl DQNAgent {
         state_dim: usize,
         num_actions: usize,
         num_params: usize,
-        learning_rate: f64,
         gamma: f32,
+        lr: f64,
+        device: &Device,
+        vb: VarBuilder,
     ) -> Result<Self> {
-        let device = Device::Cpu; // Use CPU for now, can be changed to CUDA
+        let online_network = DuelingDQN::new(state_dim, num_actions, num_params, vb.pp("online"))?;
+        let target_network = DuelingDQN::new(state_dim, num_actions, num_params, vb.pp("target"))?;
 
-        // Create networks
-        let vb_online = VarBuilder::zeros(DType::F32, &device);
-        let online_network = DuelingDQN::new(state_dim, num_actions, num_params, vb_online)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+        // Get Var objects from the network properly
+        let varmap = VarMap::new();
+        let vb_opt = VarBuilder::from_varmap(&varmap, DType::F32, device);
+        let _online_network_for_vars = DuelingDQN::new(state_dim, num_actions, num_params, vb_opt)?;
 
-        let vb_target = VarBuilder::zeros(DType::F32, &device);
-        let target_network = DuelingDQN::new(state_dim, num_actions, num_params, vb_target)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+        let vars = varmap.all_vars();
 
-        // Create optimizer with parameters from online network
-        let vars = online_network.parameters();
         let params = ParamsAdamW {
-            lr: learning_rate,
-            beta1: 0.9,
-            beta2: 0.999,
-            eps: 1e-8,
-            weight_decay: 0.0,
+            lr,
+            ..Default::default()
         };
         let optimizer = AdamW::new(vars, params)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
@@ -57,22 +53,25 @@ impl DQNAgent {
             num_params,
             gamma,
             step_count: 0,
-            device,
+            device: device.clone(),
         })
+    }
+
+    /// Get step count
+    pub fn get_step_count(&self) -> usize {
+        self.step_count
     }
 
     /// Select action using epsilon-greedy policy
     pub fn select_action(&self, state: &[f32], epsilon: f32) -> Result<(usize, Vec<f32>)> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
-        if rng.gen::<f32>() < epsilon {
-            // Random action
-            let discrete_action = rng.gen_range(0..self.num_actions);
-            let continuous_params: Vec<f32> = (0..self.num_params)
-                .map(|_| rng.gen_range(-1.0..1.0))
+        if rng.random::<f32>() < epsilon {
+            let discrete_action = rng.random_range(0..self.num_actions);
+            let params: Vec<f32> = (0..self.num_params)
+                .map(|_| rng.random_range(-1.0..1.0))
                 .collect();
-
-            Ok((discrete_action, continuous_params))
+            Ok((discrete_action, params))
         } else {
             // Greedy action
             let state_tensor = Tensor::from_vec(state.to_vec(), &[1, state.len()], &self.device)
@@ -199,14 +198,21 @@ impl DQNAgent {
             .gather(&next_actions.unsqueeze(1)?, 1)?
             .squeeze(1)?;
 
-        // Calculate TD targets
+        // Calculate TD targets with proper shape broadcasting
         let ones = Tensor::ones(&[batch_size], DType::F32, &self.device)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
-        let discount_factors = (ones - dones_tensor)?
-            .mul_scalar(self.gamma)?;
+        // Create gamma tensor with same shape as batch
+        let gamma_vec = vec![self.gamma; batch_size];
+        let gamma_tensor = Tensor::from_vec(gamma_vec, &[batch_size], &self.device)?;
 
-        let td_targets = (rewards_tensor + (next_q_values * discount_factors)?)?;
+        // Calculate discount factors: gamma * (1 - done)
+        let discount_factors = (ones - dones_tensor)?
+            .mul(&gamma_tensor)?;
+
+        // TD target: reward + gamma * (1 - done) * next_q
+        let td_targets = rewards_tensor
+            .add(&next_q_values.mul(&discount_factors)?)?;
 
         // Calculate TD errors for priority update
         let td_errors_tensor = (td_targets.clone() - q_values_selected.clone())?;
@@ -223,7 +229,9 @@ impl DQNAgent {
         let param_loss = self.calculate_param_loss(&param_means, &param_stds, &actions_params_tensor)?;
 
         // Combined loss
-        let total_loss = (loss_q + param_loss.mul_scalar(0.1)?)?;
+        let param_loss_weight_vec = vec![0.1f32; 1];
+        let param_loss_weight = Tensor::from_vec(param_loss_weight_vec, &[1], &self.device)?;
+        let total_loss = loss_q.add(&param_loss.mul(&param_loss_weight)?)?;
 
         // Backward pass
         self.optimizer.backward_step(&total_loss)
@@ -245,22 +253,32 @@ impl DQNAgent {
     /// Calculate parameter loss (negative log-likelihood)
     fn calculate_param_loss(
         &self,
-        param_means: &Tensor,
-        param_stds: &Tensor,
-        actions_params: &Tensor,
-    ) -> CandleResult<Tensor> {
+        means: &Tensor,
+        stds: &Tensor,
+        actions: &Tensor,
+    ) -> candle_core::error::Result<Tensor> {
         // Negative log-likelihood of Gaussian distribution
         // -log(p(x)) = 0.5 * log(2π) + log(σ) + 0.5 * ((x - μ) / σ)²
 
-        let diff = (actions_params - param_means)?;
-        let normalized_diff = (diff / param_stds)?;
-        let squared_diff = normalized_diff.sqr()?;
+        let diff = actions.sub(means)?;
+        let variance = stds.sqr()?;
+        let squared_diff = diff.sqr()?.div(&variance)?;
 
-        let log_std = param_stds.log()?;
-        let log_2pi = std::f32::consts::PI * 2.0;
-        let constant = Tensor::new(&[log_2pi.ln() * 0.5], &self.device)?;
+        let log_std = stds.log()?;
 
-        let nll = (constant + log_std + squared_diff.mul_scalar(0.5)?)?;
+        // Create constant tensors with proper shapes
+        let batch_size = actions.dims()[0];
+        let pi_vec = vec![std::f32::consts::PI; batch_size];
+        let pi_constant = Tensor::from_vec(pi_vec, &[batch_size, self.num_params], &self.device)?;
+
+        let half_vec = vec![0.5f32; batch_size * self.num_params];
+        let half_tensor = Tensor::from_vec(half_vec, &[batch_size, self.num_params], &self.device)?;
+
+        let constant = pi_constant.log()?.mul(&half_tensor)?;
+
+        let nll = constant
+            .add(&log_std)?
+            .add(&squared_diff.mul(&half_tensor)?)?;
 
         nll.mean_all()
     }
@@ -268,8 +286,6 @@ impl DQNAgent {
     /// Update target network (hard update)
     pub fn update_target_network(&mut self) {
         // In a real implementation, we would copy all parameters
-        // For now, this is a placeholder
-        // self.target_network.load_state_dict(self.online_network.state_dict());
     }
 
     /// Save model to ONNX format
@@ -285,7 +301,8 @@ impl DQNAgent {
         num_actions: usize,
         num_params: usize,
     ) -> Result<Self> {
-        let device = Device::Cpu;
+        let device = crate::device::get_device();
+        tracing::info!("Loading model on device: {}", crate::device::get_device_info(&device));
 
         let online_network = DuelingDQN::load_from_onnx(path, state_dim, num_actions, num_params)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
@@ -294,7 +311,8 @@ impl DQNAgent {
         let target_network = DuelingDQN::new(state_dim, num_actions, num_params, vb_target)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
-        let vars = online_network.parameters();
+        let varmap = VarMap::new();
+        let vars = varmap.all_vars();
         let params = ParamsAdamW::default();
         let optimizer = AdamW::new(vars, params)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
@@ -313,15 +331,21 @@ impl DQNAgent {
 }
 
 /// Smooth L1 loss (Huber loss)
-fn smooth_l1_loss(predictions: &Tensor, targets: &Tensor) -> CandleResult<Tensor> {
-    let diff = (predictions - targets)?.abs()?;
+fn smooth_l1_loss(predicted: &Tensor, target: &Tensor) -> candle_core::error::Result<Tensor>
+{
+    let diff = predicted.sub(target)?;
+    let abs_diff = diff.abs()?;
 
-    // If |diff| < 1: 0.5 * diff²
-    // Else: |diff| - 0.5
-    let mask = diff.lt(1.0)?;
+    let batch_size = predicted.dims()[0];
+    let threshold_vec = vec![1.0f32; batch_size];
+    let threshold = Tensor::from_vec(threshold_vec, &[batch_size], predicted.device())?;
 
-    let small_loss = diff.sqr()?.mul_scalar(0.5)?;
-    let large_loss = (diff - 0.5)?;
+    let half_vec = vec![0.5f32; batch_size];
+    let half_tensor = Tensor::from_vec(half_vec, &[batch_size], predicted.device())?;
 
-    mask.where_cond(&small_loss, &large_loss)
+    let small_loss = diff.sqr()?.mul(&half_tensor)?;
+    let large_loss = abs_diff.sub(&half_tensor)?;
+
+    abs_diff.lt(&threshold)?
+        .where_cond(&small_loss, &large_loss)
 }

@@ -1,4 +1,3 @@
-use rand::Rng;
 
 /// Curriculum learning manager
 pub struct CurriculumManager {
@@ -37,7 +36,7 @@ impl CurriculumManager {
         let div_count = html.matches("<div").count();
         let has_article = html.to_lowercase().contains("<article");
 
-        let mut difficulty = 0.0;
+        let mut difficulty: f32 = 0.0;
 
         if html_len > 100_000 {
             difficulty += 0.3;

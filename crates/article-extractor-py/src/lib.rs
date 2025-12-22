@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::types::{PyDict, PyModule};
 use article_extractor::{
     Config, BaselineExtractor, DQNAgent, SiteProfileMemory,
-    ExtractedArticle, BatchExtractionResult,
+    ExtractedArticle, BatchExtractionResult, cuda_is_available,
 };
 use std::path::PathBuf;
 
@@ -18,6 +19,8 @@ struct RustArticleExtractor {
 #[pymethods]
 impl RustArticleExtractor {
     /// Create new extractor
+
+    /// Create new extractor
     ///
     /// Args:
     ///     site_profile: Path to site profile JSON file (optional)
@@ -26,8 +29,19 @@ impl RustArticleExtractor {
     /// Returns:
     ///     RustArticleExtractor instance
     #[new]
-    #[pyo3(signature = (site_profile=None, model=None))]
-    fn new(site_profile: Option<String>, model: Option<String>) -> PyResult<Self> {
+    #[pyo3(signature = (_site_profile=None, model=None))]
+    fn new(_site_profile: Option<String>, model: Option<String>) -> PyResult<Self> {
+        // Print device info immediately
+        let device = article_extractor::device::get_device();
+        let device_info = article_extractor::device::get_device_info(&device);
+
+        // Use println! to ensure it reaches Python's stdout
+        println!("╔═══════════════════════════════════════╗");
+        println!("║  Article Extractor - Initialization    ║");
+        println!("╠═══════════════════════════════════════╣");
+        println!("║ Device: {:<31} ║", device_info);
+        println!("╚═══════════════════════════════════════╝");
+
         let config = Config::from_env()
             .map_err(|e| PyRuntimeError::new_err(format!("Config error: {}", e)))?;
 
@@ -61,6 +75,15 @@ impl RustArticleExtractor {
         })
     }
 
+    /// Check if CUDA is available
+    ///
+    /// Returns:
+    ///     bool: True if CUDA is available, False otherwise
+    #[pyo3(signature = ())]
+    fn check_cuda_available(&self) -> PyResult<bool> {
+        Ok(cuda_is_available())
+    }
+
     /// Extract article from HTML
     ///
     /// Args:
@@ -70,7 +93,7 @@ impl RustArticleExtractor {
     /// Returns:
     ///     Dictionary containing extracted article data
     #[pyo3(signature = (website_page_html, url))]
-    fn extract(&mut self, website_page_html: String, url: String) -> PyResult<PyObject> {
+    fn extract(&mut self, website_page_html: String, url: String) -> PyResult<Py<PyAny>> {
         // Extract using baseline or RL model
         let result = if self.agent.is_some() {
             // TODO: Use RL agent for extraction
@@ -84,7 +107,7 @@ impl RustArticleExtractor {
         // Extract domain and update site profile
         let domain = url::Url::parse(&url)
             .ok()
-            .and_then(|u| u.host_str().map(|h| h.to_string()))
+            .and_then(|u: url::Url| u.host_str().map(|h: &str| h.to_string()))
             .unwrap_or_else(|| "unknown".to_string());
 
         let profile = self.site_memory.get_profile(&domain);
@@ -105,9 +128,9 @@ impl RustArticleExtractor {
             xpath: Some(result.xpath),
         };
 
-        // Convert to Python dict
-        Python::with_gil(|py| {
-            let dict = pyo3::types::PyDict::new(py);
+        // Convert to Python dict - FIXED: Use Python::with_gil correctly
+        Python::attach(|py| {
+            let dict = PyDict::new(py);
             dict.set_item("url", article.url)?;
             dict.set_item("title", article.title)?;
             dict.set_item("date", article.date)?;
@@ -127,7 +150,7 @@ impl RustArticleExtractor {
     /// Returns:
     ///     Dictionary with "articles" key containing list of extracted articles
     #[pyo3(signature = (html_url_pairs))]
-    fn extract_batch(&mut self, html_url_pairs: Vec<(String, String)>) -> PyResult<PyObject> {
+    fn extract_batch(&mut self, html_url_pairs: Vec<(String, String)>) -> PyResult<Py<PyAny>> {
         let mut articles = Vec::new();
 
         for (html, url) in html_url_pairs {
@@ -149,8 +172,8 @@ impl RustArticleExtractor {
 
         let batch_result = BatchExtractionResult { articles };
 
-        // Convert to Python dict
-        Python::with_gil(|py| {
+        // Convert to Python dict - FIXED: Use Python::with_gil
+        Python::attach(|py| {
             let json_str = serde_json::to_string(&batch_result)
                 .map_err(|e| PyRuntimeError::new_err(format!("JSON error: {}", e)))?;
 
@@ -177,7 +200,19 @@ impl RustArticleExtractor {
         html_samples: Vec<(String, String)>,
         episodes: usize,
         improved: bool,
-    ) -> PyResult<PyObject> {
+    ) -> PyResult<Py<PyAny>> {
+        // Log device info before training
+        let device = article_extractor::device::get_device();
+        let device_info = article_extractor::device::get_device_info(&device);
+        println!("╔═══════════════════════════════════════╗");
+        println!("║  Starting Training                     ║");
+        println!("╠═══════════════════════════════════════╣");
+        println!("║ Device: {:<31} ║", device_info);
+        println!("║ Episodes: {:<29} ║", episodes);
+        println!("║ Mode: {:<33} ║", if improved { "Improved" } else { "Standard" });
+        println!("║ Samples: {:<30} ║", html_samples.len());
+        println!("╚═══════════════════════════════════════╝");
+
         let mut config = self.config.clone();
         config.num_episodes = episodes;
 
@@ -190,8 +225,8 @@ impl RustArticleExtractor {
         };
 
         // Convert metrics to Python dict
-        Python::with_gil(|py| {
-            let dict = pyo3::types::PyDict::new(py);
+        Python::attach(|py| {
+            let dict = PyDict::new(py);
             dict.set_item("episode_rewards", metrics.episode_rewards)?;
             dict.set_item("episode_qualities", metrics.episode_qualities)?;
             dict.set_item("best_avg_quality", metrics.best_avg_quality)?;
@@ -201,9 +236,9 @@ impl RustArticleExtractor {
 
     /// Get statistics about extractions
     #[pyo3(signature = ())]
-    fn get_stats(&self) -> PyResult<PyObject> {
-        Python::with_gil(|py| {
-            let dict = pyo3::types::PyDict::new(py);
+    fn get_stats(&self) -> PyResult<Py<PyAny>> {
+        Python::attach(|py| {
+            let dict = PyDict::new(py);
             dict.set_item("has_model", self.agent.is_some())?;
             dict.set_item("num_profiles", 0)?; // Simplified
             Ok(dict.into())
@@ -211,9 +246,16 @@ impl RustArticleExtractor {
     }
 }
 
+/// Check if CUDA is available (module-level function)
+#[pyfunction]
+fn check_cuda_available() -> PyResult<bool> {
+    Ok(cuda_is_available())
+}
+
 /// Python module definition
 #[pymodule]
-fn article_extractor_rs(_py: Python, m: &PyModule) -> PyResult<()> {
+fn article_extractor_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustArticleExtractor>()?;
+    m.add_function(wrap_pyfunction!(check_cuda_available, m)?)?;
     Ok(())
 }

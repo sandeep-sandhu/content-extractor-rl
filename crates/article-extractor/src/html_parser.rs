@@ -1,6 +1,5 @@
-use scraper::{Html, Selector, ElementRef};
+use scraper::{Html, Selector, ElementRef, Element};
 use crate::Result;
-use std::collections::HashMap;
 
 /// HTML parsing and DOM manipulation utilities
 pub struct HtmlParser;

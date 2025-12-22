@@ -113,3 +113,26 @@ def extract_article(html, url, model_path=None):
     """
     extractor = ArticleExtractor(model_path=model_path)
     return extractor.extract_from_html(html, url)
+
+def print_device_info():
+    """Print device information at startup."""
+    from article_extractor_rs import check_cuda_available
+
+    print("╔════════════════════════════════════════╗")
+    print("║   Article Extractor - Device Info     ║")
+    print("╠════════════════════════════════════════╣")
+
+    cuda_available = check_cuda_available()
+    if cuda_available:
+        print("║ Status: ✅ CUDA GPU Available         ║")
+        print("║ Training: Will use GPU acceleration   ║")
+    else:
+        print("║ Status: 💻 CPU Mode                   ║")
+        print("║ Training: Will use CPU                 ║")
+
+    print("╚════════════════════════════════════════╝")
+
+# Call it on import if in verbose mode
+import os
+if os.environ.get('ARTICLE_EXTRACTOR_VERBOSE'):
+    print_device_info()
