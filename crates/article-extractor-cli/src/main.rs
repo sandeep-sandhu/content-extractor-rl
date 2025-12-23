@@ -1,9 +1,9 @@
 use article_extractor::{
-    Config, BaselineExtractor, DQNAgent,  // Removed SiteProfileMemory
-    ExtractedArticle, BatchExtractionResult, Result,
-    train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace,
-    Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator,
-    TrainingPlotter,  // Removed PlotConfig
+Config, BaselineExtractor, DQNAgent,
+ExtractedArticle, BatchExtractionResult, Result,
+train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace,
+Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator,
+TrainingPlotter,
 };
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -11,12 +11,12 @@ use tracing::{info, error, warn};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Instant;
 use bzip2::read::BzDecoder;
+use rand::seq::SliceRandom;
 
 // Helper function to create separator string
 fn separator() -> String {
     "=".repeat(80)
 }
-
 
 #[derive(Parser)]
 #[command(name = "article-extractor")]
@@ -100,6 +100,30 @@ enum Commands {
         #[arg(long, default_value = "1000")]
         plot_every: usize,
 
+        /// Performance mode: "default", "fast", "gpu", "rtx3080"
+        #[arg(long, default_value = "default")]
+        perf_mode: String,
+
+        /// Maximum dataset samples (CRITICAL for performance)
+        #[arg(long, default_value = "5000")]
+        max_samples: usize,
+
+        /// Custom batch size override
+        #[arg(long)]
+        batch_size: Option<usize>,
+
+        /// Training frequency (train every N steps)
+        #[arg(long)]
+        train_freq: Option<usize>,
+
+        /// Gradient updates per episode
+        #[arg(long)]
+        train_steps_per_episode: Option<usize>,
+
+        /// Metrics window size
+        #[arg(long)]
+        metrics_window: Option<usize>,
+
         /// Enable MLflow tracking
         #[arg(long)]
         mlflow: bool,
@@ -130,6 +154,14 @@ enum Commands {
         /// Output directory for results
         #[arg(short, long)]
         output_dir: Option<PathBuf>,
+
+        /// Maximum samples for tuning (smaller = faster)
+        #[arg(long, default_value = "3000")]
+        max_samples: usize,
+
+        /// Use CPU for tuning (avoid GPU memory issues)
+        #[arg(long)]
+        use_cpu: bool,
     },
 
     /// Evaluate extracted articles against ground truth
@@ -171,11 +203,19 @@ async fn main() -> Result<()> {
         Commands::ExtractBatch { archive_dir, model, output_dir, max_files, batch_size } => {
             extract_batch_command(archive_dir, model, output_dir, max_files, batch_size).await?;
         }
-        Commands::Train { data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every, mlflow, mlflow_uri } => {
-            train_command(data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every, mlflow, mlflow_uri).await?;
+        Commands::Train {
+            data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every,
+            perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
+            metrics_window, mlflow, mlflow_uri
+        } => {
+            train_command(
+                data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every,
+                perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
+                metrics_window, mlflow, mlflow_uri
+            ).await?;
         }
-        Commands::Tune { data_dir, trials, episodes_per_trial, resume, output_dir } => {
-            tune_command(data_dir, trials, episodes_per_trial, resume, output_dir).await?;
+        Commands::Tune { data_dir, trials, episodes_per_trial, resume, output_dir, max_samples, use_cpu } => {
+            tune_command(data_dir, trials, episodes_per_trial, resume, output_dir, max_samples, use_cpu).await?;
         }
         Commands::Evaluate { data_dir, model, output, max_files } => {
             evaluate_command(data_dir, model, output, max_files).await?;
@@ -208,11 +248,13 @@ async fn extract_command(
     let result = if let Some(model_path) = model_path {
         info!("Using RL model: {}", model_path.display());
 
-        let _agent = DQNAgent::load(
+        let device = article_extractor::get_device();
+        let _agent = DQNAgent::load_with_device(
             &model_path,
             config.state_dim,
             config.num_discrete_actions,
             config.num_continuous_params,
+            &device,
         )?;
 
         // Use agent for extraction (simplified)
@@ -250,8 +292,6 @@ async fn extract_command(
     Ok(())
 }
 
-// Batch extraction
-
 async fn extract_batch_command(
     archive_dir: PathBuf,
     model_path: Option<PathBuf>,
@@ -259,9 +299,9 @@ async fn extract_batch_command(
     max_files: Option<usize>,
     batch_size: usize,
 ) -> Result<()> {
-    info!("{}", separator());  // FIXED: Use function call
+    info!("{}", separator());
     info!("BATCH EXTRACTION MODE");
-    info!("{}", separator());  // FIXED: Use function call
+    info!("{}", separator());
     info!("Archive directory: {}", archive_dir.display());
     info!("Batch size: {}", batch_size);
 
@@ -282,8 +322,15 @@ async fn extract_batch_command(
 
     // Initialize extractor
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
+    let device = article_extractor::get_device();
     let agent = if let Some(ref path) = model_path {
-        Some(DQNAgent::load(path, config.state_dim, config.num_discrete_actions, config.num_continuous_params)?)
+        Some(DQNAgent::load_with_device(
+            path,
+            config.state_dim,
+            config.num_discrete_actions,
+            config.num_continuous_params,
+            &device,
+        )?)
     } else {
         None
     };
@@ -361,7 +408,13 @@ async fn train_command(
     improved: bool,
     auto_hyperparams: bool,
     hyperparams: Option<PathBuf>,
-    plot_every: usize,
+    _plot_every: usize,
+    perf_mode: String,
+    max_samples: usize,
+    batch_size_override: Option<usize>,
+    train_freq_override: Option<usize>,
+    train_steps_override: Option<usize>,
+    metrics_window_override: Option<usize>,
     mlflow: bool,
     mlflow_uri: Option<String>,
 ) -> Result<()> {
@@ -371,17 +424,35 @@ async fn train_command(
     info!("Data directory: {}", data_dir.display());
     info!("Episodes: {}", episodes);
     info!("Improved: {}", improved);
+    info!("Performance mode: {}", perf_mode);
+    info!("Max samples: {}", max_samples);
     info!("MLflow: {}", mlflow);
 
-    // Load configuration
-    let mut config = Config::from_env()
-        .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
+    // Select config based on performance mode
+    let mut config = match perf_mode.as_str() {
+        "fast" | "gpu" => {
+            info!("Using GPU-optimized configuration");
+            Config::gpu_optimized()
+        }
+        "rtx3080" => {
+            info!("Using RTX 3080-optimized configuration");
+            Config::rtx_3080_optimized()
+        }
+        _ => {
+            info!("Using default configuration");
+            Config::default()
+        }
+    };
+
+    // Apply episode count and max samples
     config.num_episodes = episodes;
+    config.max_html_samples = max_samples;
+
     config.setup_directories()
         .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
 
     // Load hyperparameters if specified
-    if auto_hyperparams {
+    let hyperparams_loaded = if auto_hyperparams {
         let best_hyperparams_path = config.models_dir.join("best_hyperparams.json");
         if best_hyperparams_path.exists() {
             info!("Loading best hyperparameters from: {}", best_hyperparams_path.display());
@@ -389,17 +460,75 @@ async fn train_command(
                 params.apply_to_config(&mut config);
                 info!("Applied hyperparameters: lr={:.6}, batch={}, gamma={:.3}",
                       params.learning_rate, params.batch_size, params.gamma);
+                true
+            } else {
+                false
             }
+        } else {
+            false
         }
     } else if let Some(ref path) = hyperparams {
         info!("Loading hyperparameters from: {}", path.display());
         let params = Hyperparameters::load(path)?;
         params.apply_to_config(&mut config);
+        info!("Applied hyperparameters: lr={:.6}, batch={}, gamma={:.3}",
+              params.learning_rate, params.batch_size, params.gamma);
+        true
+    } else {
+        false
+    };
+
+    // Apply CLI overrides (these take precedence)
+    if let Some(batch_size) = batch_size_override {
+        info!("Overriding batch size to: {}", batch_size);
+        config.batch_size = batch_size;
+    } else if hyperparams_loaded && perf_mode != "default" {
+        // Restore optimized batch size if hyperparams overwrote it
+        let optimized_batch = match perf_mode.as_str() {
+            "rtx3080" => 2048,
+            "gpu" | "fast" => 1024,
+            _ => config.batch_size,
+        };
+        if config.batch_size > 4096 || config.batch_size < 256 {
+            warn!("Hyperparams batch size {} seems wrong for perf_mode={}, using {}",
+                  config.batch_size, perf_mode, optimized_batch);
+            config.batch_size = optimized_batch;
+        }
     }
 
-    // Load HTML samples
-    let html_samples = load_html_samples(&data_dir, None)?;
-    info!("Loaded {} HTML samples", html_samples.len());
+    if let Some(train_freq) = train_freq_override {
+        info!("Overriding train frequency to: {}", train_freq);
+        config.train_freq = train_freq;
+    }
+
+    if let Some(train_steps) = train_steps_override {
+        info!("Overriding train steps per episode to: {}", train_steps);
+        config.num_train_steps_per_episode = train_steps;
+    }
+
+    if let Some(window) = metrics_window_override {
+        info!("Overriding metrics window to: {}", window);
+        config.metrics_window = window;
+    }
+
+    // Log final performance configuration
+    info!("{}", separator());
+    info!("PERFORMANCE CONFIGURATION");
+    info!("{}", separator());
+    info!("Batch size: {}", config.batch_size);
+    info!("Train frequency: every {} steps", config.train_freq);
+    info!("Gradient updates per episode: {}", config.num_train_steps_per_episode);
+    info!("Min replay size: {}", config.min_replay_size);
+    info!("Metrics window: {}", config.metrics_window);
+    info!("Max HTML samples: {}", config.max_html_samples);
+    info!("{}", separator());
+
+    // Load HTML samples with optimization
+    info!("Loading HTML samples...");
+    let load_start = Instant::now();
+    let html_samples = load_html_samples(&data_dir, Some(config.max_html_samples))?;
+    let load_duration = load_start.elapsed();
+    info!("Loaded {} HTML samples in {:.2}s", html_samples.len(), load_duration.as_secs_f64());
 
     if html_samples.is_empty() {
         error!("No HTML samples found in {}", data_dir.display());
@@ -409,16 +538,15 @@ async fn train_command(
     }
 
     // Initialize MLflow if enabled
-    #[cfg(feature = "mlflow")]
+    #[cfg(feature = "mlflow-rs")]
     let mut mlflow_tracker = if mlflow {
         let uri = mlflow_uri.or_else(|| std::env::var("MLFLOW_TRACKING_URI").ok());
-        let tracker = article_extractor::mlflow::MlflowTracker::new(uri);
-        tracker
+        article_extractor::mlflow::MlflowTracker::new(uri)
     } else {
         article_extractor::mlflow::MlflowTracker::new(None)
     };
 
-    #[cfg(feature = "mlflow")]
+    #[cfg(feature = "mlflow-rs")]
     if mlflow_tracker.is_enabled() {
         mlflow_tracker.start_run(Some(format!("training_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))))?;
 
@@ -430,6 +558,9 @@ async fn train_command(
         params.insert("epsilon_decay".to_string(), config.epsilon_decay.to_string());
         params.insert("episodes".to_string(), episodes.to_string());
         params.insert("improved".to_string(), improved.to_string());
+        params.insert("perf_mode".to_string(), perf_mode.clone());
+        params.insert("train_freq".to_string(), config.train_freq.to_string());
+        params.insert("train_steps_per_episode".to_string(), config.num_train_steps_per_episode.to_string());
         mlflow_tracker.log_params(params)?;
     }
 
@@ -437,7 +568,7 @@ async fn train_command(
     let plotter = TrainingPlotter::new();
     let plot_path = config.output_dir.join("training_plot.png");
 
-    // Train with periodic plotting
+    // Train
     let start_time = Instant::now();
 
     let (_agent, metrics) = if improved {
@@ -452,7 +583,7 @@ async fn train_command(
     plotter.plot_training_results(&metrics, &plot_path)?;
 
     // Log to MLflow
-    #[cfg(feature = "mlflow")]
+    #[cfg(feature = "mlflow-rs")]
     if mlflow_tracker.is_enabled() {
         mlflow_tracker.log_training_metrics(&metrics, episodes)?;
         mlflow_tracker.log_artifact(&plot_path)?;
@@ -469,7 +600,11 @@ async fn train_command(
     info!("{}", separator());
     info!("TRAINING COMPLETED");
     info!("{}", separator());
-    info!("Duration: {:.2} seconds ({:.2} minutes)", duration.as_secs_f64(), duration.as_secs_f64() / 60.0);
+    info!("Duration: {:.2} seconds ({:.2} minutes, {:.2} hours)",
+          duration.as_secs_f64(),
+          duration.as_secs_f64() / 60.0,
+          duration.as_secs_f64() / 3600.0);
+    info!("Episodes per second: {:.2}", episodes as f64 / duration.as_secs_f64());
     info!("Best avg quality: {:.4}", metrics.best_avg_quality);
     info!("Final reward: {:.4}", metrics.episode_rewards.last().copied().unwrap_or(0.0));
     info!("Model saved at: {}", config.models_dir.join("best_model.onnx").display());
@@ -485,22 +620,27 @@ async fn tune_command(
     episodes_per_trial: usize,
     resume: bool,
     output_dir: Option<PathBuf>,
+    max_samples: usize,
+    use_cpu: bool,
 ) -> Result<()> {
     info!("{}", separator());
     info!("TPE HYPERPARAMETER TUNING");
     info!("{}", separator());
     info!("Trials: {}", trials);
     info!("Episodes per trial: {}", episodes_per_trial);
+    info!("Max samples: {}", max_samples);
     info!("Resume: {}", resume);
+    info!("Use CPU: {}", use_cpu);
 
-    let config = Config::from_env()
-        .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
+    let mut config = Config::default();
+    config.use_cpu_for_tuning = use_cpu;
 
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
     std::fs::create_dir_all(&output_dir)?;
 
-    // Load samples (use subset for faster tuning)
-    let html_samples = load_html_samples(&data_dir, Some(5000))?;
+    // Load samples with limit for faster tuning
+    info!("Loading HTML samples for tuning...");
+    let html_samples = load_html_samples(&data_dir, Some(max_samples))?;
     info!("Loaded {} HTML samples for tuning", html_samples.len());
 
     if html_samples.is_empty() {
@@ -515,20 +655,23 @@ async fn tune_command(
     let mut optimizer = if resume && state_path.exists() {
         TPEOptimizer::with_resume(space, state_path.clone())?
     } else {
-        let opt = TPEOptimizer::new(space);
-        opt
+        TPEOptimizer::new(space)
     };
 
     // Progress bar
     let completed = optimizer.num_trials();
     let remaining = trials.saturating_sub(completed);
 
+    if completed > 0 {
+        info!("Resuming from trial {}/{}", completed, trials);
+    }
+
     let pb = ProgressBar::new(remaining as u64);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} Trial {msg}")
             .unwrap()
-            .progress_chars("=>-"),
+            .progress_chars("█▓▒░"),
     );
 
     // Run trials
@@ -544,6 +687,7 @@ async fn tune_command(
         let mut trial_config = config.clone();
         params.apply_to_config(&mut trial_config);
         trial_config.num_episodes = episodes_per_trial;
+        trial_config.max_html_samples = max_samples;
 
         let trial_start = Instant::now();
 
@@ -551,10 +695,27 @@ async fn tune_command(
 
         let duration = trial_start.elapsed();
 
-        // Calculate quality score
-        let quality = metrics.best_avg_quality;
+        // Calculate quality score (use smaller window for faster feedback)
+        let window = metrics.episode_qualities.len().min(50);
+        let quality = if metrics.episode_qualities.len() >= window {
+            metrics.episode_qualities[metrics.episode_qualities.len() - window..]
+                .iter()
+                .sum::<f32>() / window as f32
+        } else if !metrics.episode_qualities.is_empty() {
+            metrics.episode_qualities.iter().sum::<f32>() / metrics.episode_qualities.len() as f32
+        } else {
+            0.0
+        };
+
         let avg_reward = if !metrics.episode_rewards.is_empty() {
-            metrics.episode_rewards.iter().sum::<f32>() / metrics.episode_rewards.len() as f32
+            let window = metrics.episode_rewards.len().min(50);
+            if metrics.episode_rewards.len() >= window {
+                metrics.episode_rewards[metrics.episode_rewards.len() - window..]
+                    .iter()
+                    .sum::<f32>() / window as f32
+            } else {
+                metrics.episode_rewards.iter().sum::<f32>() / metrics.episode_rewards.len() as f32
+            }
         } else {
             0.0
         };
@@ -596,6 +757,8 @@ async fn tune_command(
         info!("  batch_size: {}", best.batch_size);
         info!("  gamma: {:.3}", best.gamma);
         info!("  epsilon_decay: {:.3}", best.epsilon_decay);
+        info!("  priority_alpha: {:.3}", best.priority_alpha);
+        info!("  priority_beta: {:.3}", best.priority_beta);
         info!("Results saved to: {}", results_path.display());
         info!("Best hyperparameters saved to: {}", best_path.display());
         info!("{}", separator());

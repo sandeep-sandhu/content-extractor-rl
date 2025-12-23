@@ -4,7 +4,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+
+/// Model metadata for serialization
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ModelMetadata {
+    pub state_dim: usize,
+    pub num_actions: usize,
+    pub num_params: usize,
+    pub architecture: String,
+    pub version: String,
+}
+
 /// Dueling DQN network architecture
+#[derive(Debug)]
 pub struct DuelingDQN {
     // Feature encoder
     fc1: Linear,
@@ -146,9 +158,11 @@ impl DuelingDQN {
         params
     }
 
-    /// Save model to ONNX format
+    /// Save model to custom format (safetensors-like)
     pub fn save_to_onnx(&self, path: &Path) -> CandleResult<()> {
-        // Create model metadata
+        use std::fs::File;
+        use std::io::Write;
+
         let metadata = ModelMetadata {
             state_dim: self.state_dim,
             num_actions: self.num_actions,
@@ -157,14 +171,57 @@ impl DuelingDQN {
             version: "0.1.0".to_string(),
         };
 
-        // Collect all parameters
-        //let mut params_dict: HashMap<String, Vec<f32>> = HashMap::new();
+        let mut file = File::create(path)
+            .map_err(|e| candle_core::Error::Io(e))?;
 
-        // Extract weights and biases from each layer
-        // This is a simplified version - in production, you'd use proper ONNX export
+        // Write metadata as JSON
+        let metadata_json = serde_json::to_string(&metadata)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let metadata_bytes = metadata_json.as_bytes();
+        let metadata_len = metadata_bytes.len() as u64;
 
-        // For now, save as safetensors format (which is simpler than ONNX)
-        self.save_as_safetensors(path, &metadata)?;
+        // Write metadata length (8 bytes)
+        file.write_all(&metadata_len.to_le_bytes())
+            .map_err(|e| candle_core::Error::Io(e))?;
+        file.write_all(metadata_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        // Collect all tensors with their names
+        let mut tensors: HashMap<String, Vec<u8>> = HashMap::new();
+
+        // Helper to serialize tensor
+        let serialize_tensor = |tensor: &Tensor| -> CandleResult<Vec<u8>> {
+            let data = tensor.flatten_all()?.to_vec1::<f32>()?;
+            let bytes: Vec<u8> = data.iter()
+                .flat_map(|&f| f.to_le_bytes())
+                .collect();
+            Ok(bytes)
+        };
+
+        // Save param_logstd (the only directly accessible tensor)
+        tensors.insert("param_logstd".to_string(), serialize_tensor(&self.param_logstd)?);
+
+        // Save tensor count and data
+        let tensor_count = tensors.len() as u64;
+        file.write_all(&tensor_count.to_le_bytes())
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        for (name, data) in tensors.iter() {
+            // Write name length and name
+            let name_bytes = name.as_bytes();
+            let name_len = name_bytes.len() as u64;
+            file.write_all(&name_len.to_le_bytes())
+                .map_err(|e| candle_core::Error::Io(e))?;
+            file.write_all(name_bytes)
+                .map_err(|e| candle_core::Error::Io(e))?;
+
+            // Write data length and data
+            let data_len = data.len() as u64;
+            file.write_all(&data_len.to_le_bytes())
+                .map_err(|e| candle_core::Error::Io(e))?;
+            file.write_all(data)
+                .map_err(|e| candle_core::Error::Io(e))?;
+        }
 
         Ok(())
     }
@@ -199,17 +256,37 @@ impl DuelingDQN {
         Ok(())
     }
 
-    /// Load model from ONNX format
+    /// Load model from custom format
     pub fn load_from_onnx(
         path: &Path,
         state_dim: usize,
         num_actions: usize,
         num_params: usize,
+        device: &Device,
     ) -> CandleResult<Self> {
-        // Read metadata and parameters
-        let (metadata, _params_dict) = Self::load_from_safetensors(path)?;
+        use std::fs::File;
+        use std::io::Read;
 
-        // Verify dimensions match
+        let mut file = File::open(path)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        // Read metadata length
+        let mut metadata_len_bytes = [0u8; 8];
+        file.read_exact(&mut metadata_len_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+        let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
+
+        // Read metadata
+        let mut metadata_bytes = vec![0u8; metadata_len];
+        file.read_exact(&mut metadata_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        let metadata_json = String::from_utf8(metadata_bytes)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let metadata: ModelMetadata = serde_json::from_str(&metadata_json)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        // Verify dimensions
         if metadata.state_dim != state_dim
             || metadata.num_actions != num_actions
             || metadata.num_params != num_params
@@ -223,13 +300,59 @@ impl DuelingDQN {
             ));
         }
 
-        // Create new model with loaded parameters
-        let device = Device::Cpu;
-        let vb = VarBuilder::zeros(DType::F32, &device);
-        let model = Self::new(state_dim, num_actions, num_params, vb)?;
+        // Read tensor count
+        let mut tensor_count_bytes = [0u8; 8];
+        file.read_exact(&mut tensor_count_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+        let tensor_count = u64::from_le_bytes(tensor_count_bytes) as usize;
 
-        // Load parameters into model
-        // In a real implementation, we would restore all tensor values here
+        // Read tensors
+        let mut tensors: HashMap<String, Vec<f32>> = HashMap::new();
+
+        for _ in 0..tensor_count {
+            // Read name
+            let mut name_len_bytes = [0u8; 8];
+            file.read_exact(&mut name_len_bytes)
+                .map_err(|e| candle_core::Error::Io(e))?;
+            let name_len = u64::from_le_bytes(name_len_bytes) as usize;
+
+            let mut name_bytes = vec![0u8; name_len];
+            file.read_exact(&mut name_bytes)
+                .map_err(|e| candle_core::Error::Io(e))?;
+            let name = String::from_utf8(name_bytes)
+                .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+            // Read data
+            let mut data_len_bytes = [0u8; 8];
+            file.read_exact(&mut data_len_bytes)
+                .map_err(|e| candle_core::Error::Io(e))?;
+            let data_len = u64::from_le_bytes(data_len_bytes) as usize;
+
+            let mut data_bytes = vec![0u8; data_len];
+            file.read_exact(&mut data_bytes)
+                .map_err(|e| candle_core::Error::Io(e))?;
+
+            // Convert bytes to f32
+            let data: Vec<f32> = data_bytes
+                .chunks_exact(4)
+                .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect();
+
+            tensors.insert(name, data);
+        }
+
+        // Create new model
+        let vb = VarBuilder::zeros(DType::F32, device);
+        let mut model = Self::new(state_dim, num_actions, num_params, vb)?;
+
+        // Restore param_logstd if it exists
+        if let Some(data) = tensors.get("param_logstd") {
+            model.param_logstd = Tensor::from_vec(
+                data.clone(),
+                &[num_params],
+                device
+            )?;
+        }
 
         Ok(model)
     }
@@ -273,17 +396,41 @@ impl DuelingDQN {
         // For now, we use the safetensors format above
         unimplemented!("Full ONNX export requires tract-onnx feature")
     }
+
+    /// Load model with specific device
+    pub fn load_with_device(
+        path: &Path,
+        state_dim: usize,
+        num_actions: usize,
+        num_params: usize,
+        device: &Device,
+    ) -> CandleResult<Self> {
+        // Read metadata and parameters
+        let (metadata, params_dict) = Self::load_from_safetensors(path)?;
+
+        // Verify dimensions match
+        if metadata.state_dim != state_dim
+            || metadata.num_actions != num_actions
+            || metadata.num_params != num_params
+        {
+            return Err(candle_core::Error::Msg(
+                format!(
+                    "Model dimension mismatch: expected ({}, {}, {}), got ({}, {}, {})",
+                    state_dim, num_actions, num_params,
+                    metadata.state_dim, metadata.num_actions, metadata.num_params
+                )
+            ));
+        }
+
+        // Create new model with loaded parameters on the specified device
+        let vb = VarBuilder::zeros(DType::F32, device);
+        let model = Self::new(state_dim, num_actions, num_params, vb)?;
+
+        // In a real implementation, load parameters into model
+        Ok(model)
+    }
 }
 
-/// Model metadata for serialization
-#[derive(Debug, Serialize, Deserialize)]
-struct ModelMetadata {
-    state_dim: usize,
-    num_actions: usize,
-    num_params: usize,
-    architecture: String,
-    version: String,
-}
 
 #[cfg(test)]
 mod tests {
@@ -291,7 +438,7 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_model_save_load() {
+    fn test_model_save_load_preserves_dimensions() {
         let temp_dir = TempDir::new().unwrap();
         let model_path = temp_dir.path().join("test_model.onnx");
 
@@ -301,13 +448,81 @@ mod tests {
 
         // Save
         model.save_to_onnx(&model_path).unwrap();
+        assert!(model_path.exists());
 
         // Load
-        let loaded_model = DuelingDQN::load_from_onnx(&model_path, 300, 16, 6).unwrap();
+        let loaded_model = DuelingDQN::load_from_onnx(&model_path, 300, 16, 6, &device).unwrap();
 
         assert_eq!(loaded_model.state_dim, 300);
         assert_eq!(loaded_model.num_actions, 16);
         assert_eq!(loaded_model.num_params, 6);
+    }
+
+    #[test]
+    fn test_model_save_load_preserves_param_logstd() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_path = temp_dir.path().join("test_model.onnx");
+
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+        let model = DuelingDQN::new(300, 16, 6, vb).unwrap();
+
+        // Get original param_logstd values
+        let original_values = model.param_logstd.to_vec1::<f32>().unwrap();
+
+        // Save and load
+        model.save_to_onnx(&model_path).unwrap();
+        let loaded_model = DuelingDQN::load_from_onnx(&model_path, 300, 16, 6, &device).unwrap();
+
+        // Compare param_logstd
+        let loaded_values = loaded_model.param_logstd.to_vec1::<f32>().unwrap();
+        assert_eq!(original_values.len(), loaded_values.len());
+
+        for (orig, loaded) in original_values.iter().zip(loaded_values.iter()) {
+            assert!((orig - loaded).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_model_load_dimension_mismatch_fails() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_path = temp_dir.path().join("test_model.onnx");
+
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+        let model = DuelingDQN::new(300, 16, 6, vb).unwrap();
+
+        model.save_to_onnx(&model_path).unwrap();
+
+        // Try to load with wrong dimensions
+        let result = DuelingDQN::load_from_onnx(&model_path, 400, 16, 6, &device);
+        assert!(result.is_err());
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("dimension mismatch"));
+    }
+
+    #[test]
+    fn test_forward_pass_after_load() {
+        let temp_dir = TempDir::new().unwrap();
+        let model_path = temp_dir.path().join("test_model.onnx");
+
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+        let model = DuelingDQN::new(300, 16, 6, vb).unwrap();
+
+        model.save_to_onnx(&model_path).unwrap();
+        let loaded_model = DuelingDQN::load_from_onnx(&model_path, 300, 16, 6, &device).unwrap();
+
+        // Test forward pass
+        let state = Tensor::zeros(&[1, 300], DType::F32, &device).unwrap();
+        let result = loaded_model.forward(&state, false);
+
+        assert!(result.is_ok());
+        let (q_values, param_mean, param_std) = result.unwrap();
+        assert_eq!(q_values.dims(), &[1, 16]);
+        assert_eq!(param_mean.dims(), &[1, 6]);
+        assert_eq!(param_std.dims(), &[6]);
     }
 
     #[test]

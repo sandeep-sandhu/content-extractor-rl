@@ -18,26 +18,46 @@ use crate::{Checkpoint, CheckpointManager};
 use candle_core::DType;
 use candle_nn::VarBuilder;
 use candle_core::Device;
-// use crate::device::{get_device, get_device_info};
+use crate::evaluation::GroundTruthData;
+
+/// Extract domain from ground truth JSON file
+fn get_domain_from_ground_truth(html_path: &Path) -> Result<String> {
+    // Look for accompanying .json file
+    let json_path = html_path.with_extension("json");
+
+    if json_path.exists() {
+        match GroundTruthData::load(&json_path) {
+            Ok(gt_data) => {
+                let url = gt_data.get_url();
+                if !url.is_empty() {
+                    if let Ok(parsed_url) = url::Url::parse(url) {
+                        if let Some(domain) = parsed_url.host_str() {
+                            return Ok(domain.to_string());
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to load ground truth for domain extraction: {}", e);
+            }
+        }
+    }
+
+    // Fallback: try to extract from filename or use "unknown"
+    html_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| ExtractionError::ParseError("Cannot determine domain".to_string()))
+}
 
 /// Training metrics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]  // Add Default derive
 pub struct TrainingMetrics {
     pub episode_rewards: Vec<f32>,
     pub episode_qualities: Vec<f32>,
     pub episode_losses: Vec<f32>,
     pub best_avg_quality: f32,
-}
-
-impl TrainingMetrics {
-    pub fn new() -> Self {
-        Self {
-            episode_rewards: Vec::new(),
-            episode_qualities: Vec::new(),
-            episode_losses: Vec::new(),
-            best_avg_quality: 0.0,
-        }
-    }
 }
 
 
@@ -48,8 +68,14 @@ pub fn train_standard(
 ) -> Result<(DQNAgent, TrainingMetrics)> {
     info!("Starting standard training for {} episodes", config.num_episodes);
 
-    // Initialize device and varbuilder
-    let device = Device::Cpu;
+    let device = if config.use_cpu_for_tuning {
+        Device::Cpu  // Force CPU for hyperparameter tuning
+    } else if crate::cuda_is_available() {
+        Device::cuda_if_available(0).unwrap_or(Device::Cpu)
+    } else {
+        Device::Cpu
+    };
+
     let vb = VarBuilder::zeros(DType::F32, &device);
 
     // Initialize components
@@ -72,7 +98,7 @@ pub fn train_standard(
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor, config.clone());
-    let mut metrics = TrainingMetrics::new();
+    let mut metrics = TrainingMetrics { episode_rewards: vec![], episode_qualities: vec![], episode_losses: vec![], best_avg_quality: 0.0 };
     let mut epsilon = config.epsilon_start;
 
     // Initialize checkpoint manager
@@ -87,11 +113,12 @@ pub fn train_standard(
 
         // Load model
         if checkpoint.model_path.exists() {
-            agent = DQNAgent::load(
+            agent = DQNAgent::load_with_device(
                 &checkpoint.model_path,
                 config.state_dim,
                 config.num_discrete_actions,
                 config.num_continuous_params,
+                &device,  // Explicitly specify device
             )?;
         }
 
@@ -114,10 +141,18 @@ pub fn train_standard(
         let idx = episode % html_samples.len();
         let (html, url) = &html_samples[idx];
 
-        let domain = url::Url::parse(url)
-            .ok()
-            .and_then(|u| u.host_str().map(|h| h.to_string()))
-            .unwrap_or_else(|| "unknown".to_string());
+        // FIXED: Extract domain from ground truth JSON if available
+        let domain = if let Ok(parsed_url) = url::Url::parse(url) {
+            if let Some(host) = parsed_url.host_str() {
+                host.to_string()
+            } else {
+                "unknown".to_string()
+            }
+        } else {
+            // Try to get from ground truth JSON
+            get_domain_from_ground_truth(Path::new(url))
+                .unwrap_or_else(|_| "unknown".to_string())
+        };
 
         let site_profile = site_memory.get_profile(&domain);
 
@@ -272,7 +307,13 @@ pub fn train_with_improvements(
     info!("Starting improved training for {} episodes", config.num_episodes);
 
     // Initialize device and varbuilder
-    let device = Device::Cpu;
+    let device = if config.use_cpu_for_tuning {
+        Device::Cpu  // Force CPU for hyperparameter tuning
+    } else if crate::cuda_is_available() {
+        Device::cuda_if_available(0).unwrap_or(Device::Cpu)
+    } else {
+        Device::Cpu
+    };
     let vb = VarBuilder::zeros(DType::F32, &device);
 
     // Initialize components
@@ -295,7 +336,7 @@ pub fn train_with_improvements(
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor.clone(), config.clone());
-    let mut metrics = TrainingMetrics::new();
+    let mut metrics = TrainingMetrics { episode_rewards: vec![], episode_qualities: vec![], episode_losses: vec![], best_avg_quality: 0.0 };
 
     // Enhanced components
     let reward_calculator = ImprovedRewardCalculator::new(config.stopwords.clone());
@@ -328,10 +369,17 @@ pub fn train_with_improvements(
         let idx = episode % appropriate_samples.len();
         let (html, url) = appropriate_samples[idx];
 
-        let domain = url::Url::parse(url)
-            .ok()
-            .and_then(|u| u.host_str().map(|h| h.to_string()))
-            .unwrap_or_else(|| "unknown".to_string());
+        // FIXED: Extract domain from ground truth JSON
+        let domain = if let Ok(parsed_url) = url::Url::parse(url) {
+            if let Some(host) = parsed_url.host_str() {
+                host.to_string()
+            } else {
+                "unknown".to_string()
+            }
+        } else {
+            get_domain_from_ground_truth(Path::new(url))
+                .unwrap_or_else(|_| "unknown".to_string())
+        };
 
         let site_profile = site_memory.get_profile(&domain);
 

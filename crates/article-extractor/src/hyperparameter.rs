@@ -17,8 +17,8 @@ pub struct GridSearchConfig {
 impl Default for GridSearchConfig {
     fn default() -> Self {
         Self {
-            learning_rates: vec![1e-4, 3e-4, 1e-3],
-            batch_sizes: vec![128, 256, 512],
+            learning_rates: vec![1e-4, 3e-4, 1e-3, 5e-3, ],
+            batch_sizes: vec![256, 512, 1024, 2048, 4096, 8192, 16384],
             gammas: vec![0.90, 0.95, 0.99],
             epsilon_decays: vec![0.990, 0.995, 0.999],
             priority_alphas: vec![0.4, 0.6, 0.7],

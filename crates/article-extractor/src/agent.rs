@@ -260,19 +260,26 @@ impl DQNAgent {
         // Negative log-likelihood of Gaussian distribution
         // -log(p(x)) = 0.5 * log(2π) + log(σ) + 0.5 * ((x - μ) / σ)²
 
+        let batch_size = actions.dims()[0];
+        let num_params = actions.dims()[1];
+
         let diff = actions.sub(means)?;
-        let variance = stds.sqr()?;
+
+        // CRITICAL FIX: Broadcast stds to match batch dimension
+        // stds has shape [num_params], need to broadcast to [batch_size, num_params]
+        let stds_broadcast = stds.unsqueeze(0)?.broadcast_as(means.shape())?;
+
+        let variance = stds_broadcast.sqr()?;
         let squared_diff = diff.sqr()?.div(&variance)?;
 
-        let log_std = stds.log()?;
+        let log_std = stds_broadcast.log()?;
 
         // Create constant tensors with proper shapes
-        let batch_size = actions.dims()[0];
-        let pi_vec = vec![std::f32::consts::PI; batch_size];
-        let pi_constant = Tensor::from_vec(pi_vec, &[batch_size, self.num_params], &self.device)?;
+        let pi_vec = vec![std::f32::consts::PI; batch_size * num_params];
+        let pi_constant = Tensor::from_vec(pi_vec, &[batch_size, num_params], &self.device)?;
 
-        let half_vec = vec![0.5f32; batch_size * self.num_params];
-        let half_tensor = Tensor::from_vec(half_vec, &[batch_size, self.num_params], &self.device)?;
+        let half_vec = vec![0.5f32; batch_size * num_params];
+        let half_tensor = Tensor::from_vec(half_vec, &[batch_size, num_params], &self.device)?;
 
         let constant = pi_constant.log()?.mul(&half_tensor)?;
 
@@ -304,7 +311,7 @@ impl DQNAgent {
         let device = crate::device::get_device();
         tracing::info!("Loading model on device: {}", crate::device::get_device_info(&device));
 
-        let online_network = DuelingDQN::load_from_onnx(path, state_dim, num_actions, num_params)
+        let online_network = DuelingDQN::load_from_onnx(path, state_dim, num_actions, num_params, &device)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         let vb_target = VarBuilder::zeros(DType::F32, &device);
@@ -326,6 +333,41 @@ impl DQNAgent {
             gamma: 0.95,
             step_count: 0,
             device,
+        })
+    }
+
+    pub fn load_with_device(
+        path: &std::path::Path,
+        state_dim: usize,
+        num_actions: usize,
+        num_params: usize,
+        device: &Device,
+    ) -> Result<Self> {
+        tracing::info!("Loading model on device: {}", crate::device::get_device_info(&device));
+
+        let online_network = DuelingDQN::load_from_onnx(path, state_dim, num_actions, num_params, device)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Create target network on the SAME device
+        let vb_target = VarBuilder::zeros(DType::F32, device);
+        let target_network = DuelingDQN::new(state_dim, num_actions, num_params, vb_target)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let varmap = VarMap::new();
+        let vars = varmap.all_vars();
+        let params = ParamsAdamW::default();
+        let optimizer = AdamW::new(vars, params)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        Ok(Self {
+            online_network,
+            target_network,
+            optimizer,
+            num_actions,
+            num_params,
+            gamma: 0.95,
+            step_count: 0,
+            device: device.clone(),
         })
     }
 }

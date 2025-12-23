@@ -39,11 +39,6 @@ pub use device::{get_device, cuda_is_available, get_device_info, print_device_in
 pub mod checkpoint;
 pub use checkpoint::{Checkpoint, CheckpointManager};
 
-#[cfg(feature = "onnx")]
-pub mod onnx_export;
-
-#[cfg(feature = "onnx")]
-pub use onnx_export::OnnxModelExporter;
 
 #[cfg(feature = "mlflow-rs")]
 pub use mlflow::{MlflowTracker, create_tracker};

@@ -47,7 +47,6 @@ tempfile = "3.23.0"
 
 [features]
 default = []
-onnx = ["tract-onnx", "tract-core"]
 cuda = ["candle-core/cuda", "candle-nn/cuda"]
 mlflow-rs = ["trs-mlflow", "tokio", "futures"]  # Added tokio and futures here
 

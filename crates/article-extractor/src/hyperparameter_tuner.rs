@@ -22,7 +22,7 @@ impl Default for HyperparameterSpace {
     fn default() -> Self {
         Self {
             learning_rate: (1e-5, 1e-2),
-            batch_size: vec![64, 128, 256, 512],
+            batch_size: vec![256, 512, 1024, 2048, 4096, 8192, 16384],
             gamma: (0.85, 0.99),
             epsilon_decay: (0.985, 0.999),
             priority_alpha: (0.4, 0.8),
