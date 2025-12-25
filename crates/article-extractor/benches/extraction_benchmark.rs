@@ -56,7 +56,7 @@ fn benchmark_text_quality_calculation(c: &mut Criterion) {
 
     c.bench_function("text_quality_calculation", |b| {
         b.iter(|| {
-            TextUtils::calculate_text_quality(
+            article_extractor::text_utils::TextUtils::calculate_text_quality(
                 black_box(text),
                 black_box(&config.stopwords)
             )
@@ -69,14 +69,14 @@ fn benchmark_html_parsing(c: &mut Criterion) {
 
     c.bench_function("html_parsing", |b| {
         b.iter(|| {
-            HtmlParser::parse(black_box(&html)).unwrap()
+            article_extractor::html_parser::HtmlParser::parse(black_box(&html)).unwrap()
         });
     });
 }
 
 fn benchmark_reward_calculation(c: &mut Criterion) {
     let config = Config::default();
-    let calculator = ImprovedRewardCalculator::new(config.stopwords);
+    let calculator = article_extractor::reward::ImprovedRewardCalculator::new(config.stopwords);
 
     let text = "This is an excellent article with proper structure and content. \
                 It contains multiple well-formed sentences that provide valuable information. \
@@ -98,7 +98,8 @@ fn benchmark_site_profile_operations(c: &mut Criterion) {
 
     c.bench_function("site_profile_get", |b| {
         b.iter(|| {
-            memory.get_profile(black_box("example.com"))
+            let x = memory.get_profile(black_box("example.com"));
+            x.clone()
         });
     });
 
@@ -118,7 +119,7 @@ fn benchmark_site_profile_operations(c: &mut Criterion) {
 }
 
 fn benchmark_replay_buffer_operations(c: &mut Criterion) {
-    let mut buffer = PrioritizedReplayBuffer::new(10000, 0.6, 0.4);
+    let mut buffer = article_extractor::replay_buffer::PrioritizedReplayBuffer::new(10000, 0.6, 0.4);
 
     // Fill buffer
     for i in 0..1000 {
@@ -154,7 +155,7 @@ fn benchmark_replay_buffer_operations(c: &mut Criterion) {
 }
 
 fn benchmark_curriculum_difficulty_estimation(c: &mut Criterion) {
-    let curriculum = CurriculumManager::new();
+    let curriculum = article_extractor::curriculum::CurriculumManager::new();
     let html = create_sample_html(20);
 
     c.bench_function("curriculum_difficulty_estimation", |b| {

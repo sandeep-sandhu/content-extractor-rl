@@ -3,6 +3,11 @@
 use article_extractor::*;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use article_extractor::curriculum::CurriculumManager;
+use article_extractor::html_parser::HtmlParser;
+use article_extractor::replay_buffer::PrioritizedReplayBuffer;
+use article_extractor::reward::ImprovedRewardCalculator;
+use article_extractor::text_utils::TextUtils;
 
 #[test]
 fn test_end_to_end_extraction() {
@@ -88,6 +93,8 @@ fn test_site_profile_persistence() {
         xpath: "//article[1]".to_string(),
         quality_score: 0.85,
         parameters: std::collections::HashMap::new(),
+        title: None,
+        date: None,
     };
     profile.add_extraction(result);
 

@@ -65,7 +65,7 @@ fn main() {
     {
         let initial_memory = get_memory_usage();
 
-        let mut buffer = PrioritizedReplayBuffer::new(100_000, 0.6, 0.4);
+        let mut buffer = article_extractor::replay_buffer::PrioritizedReplayBuffer::new(100_000, 0.6, 0.4);
 
         for i in 0..100_000 {
             let exp = replay_buffer::Experience {

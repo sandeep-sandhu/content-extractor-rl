@@ -16,17 +16,20 @@ pub mod reward;
 pub mod curriculum;
 pub mod training;
 pub mod hyperparameter;
+pub mod cli_utils;
 
 // Re-exports
 pub use config::Config;
 pub use site_profile::{SiteProfile, SiteProfileMemory};
 pub use baseline_extractor::BaselineExtractor;
+pub use baseline_extractor::MetadataExtractor;
 pub use agent::DQNAgent;
 pub use environment::ArticleExtractionEnvironment;
 pub use training::{train_standard, train_with_improvements, TrainingMetrics};
 pub use hyperparameter::{HyperparameterSearch, GridSearchConfig};
 pub mod checkpoint;
 pub use checkpoint::{Checkpoint, CheckpointManager};
+pub use cli_utils::*;
 
 #[cfg(feature = "onnx")]
 pub mod onnx_export;
