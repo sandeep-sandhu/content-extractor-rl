@@ -121,20 +121,6 @@ impl Config {
         let mut config = Self::default();
 
         // GPU-specific optimizations
-        config.batch_size = 2048;                    // Larger but not excessive
-        config.num_train_steps_per_episode = 8;     // More gradient updates
-        config.train_freq = 2;                       // Train more frequently
-        config.max_html_samples = 3000;              // Even smaller dataset
-        config.metrics_window = 25;                  // Faster feedback
-
-        config
-    }
-
-    /// Create config optimized for your specific GPU (7.6GB)
-    pub fn rtx_3080_optimized() -> Self {
-        let mut config = Self::default();
-
-        // Maximize GPU utilization for RTX 3080 Ti / similar
         config.batch_size = 8192;                    // Much larger batches
         config.num_train_steps_per_episode = 32;    // Many gradient updates
         config.train_freq = 1;                       // Train every step

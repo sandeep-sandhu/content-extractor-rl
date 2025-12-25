@@ -46,6 +46,8 @@ fn main() {
                     xpath: "//article[1]".to_string(),
                     quality_score: 0.8,
                     parameters: std::collections::HashMap::new(),
+                    title: None,
+                    date: None,
                 };
                 profile.add_extraction(result);
             }

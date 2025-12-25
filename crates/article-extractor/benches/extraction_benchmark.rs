@@ -109,6 +109,8 @@ fn benchmark_site_profile_operations(c: &mut Criterion) {
         xpath: "//article[1]".to_string(),
         quality_score: 0.8,
         parameters: std::collections::HashMap::new(),
+        title: None,
+        date: None,
     };
 
     c.bench_function("site_profile_add_extraction", |b| {

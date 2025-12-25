@@ -193,17 +193,6 @@ fn separator() -> String {
 
 fn setup_logging(command_type: &str) -> std::result::Result<non_blocking::WorkerGuard, Box<dyn Error>> {
 
-    // Initialize tracing with custom filter to suppress html5ever warnings
-    let filter = EnvFilter::new("article_extractor=info")
-        // Suppress html5ever warnings
-        .add_directive("html5ever=error".parse().unwrap())
-        // Keep other important warnings
-        .add_directive("warn".parse().unwrap());
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .init();
-
     // Create log directory
     let log_dir = env::current_dir()?.join("logs");
     std::fs::create_dir_all(&log_dir)?;
@@ -248,12 +237,15 @@ fn setup_logging(command_type: &str) -> std::result::Result<non_blocking::Worker
         .with_thread_ids(false)
         .with_timer(fmt::time::UtcTime::rfc_3339());
 
-    // Initialize tracing
+    // Initialize tracing with custom filter to suppress html5ever warnings
     tracing_subscriber::registry()
         .with(file_layer)
         .with(console_layer)
         .with(tracing_subscriber::EnvFilter::from_default_env()
+            // Suppress html5ever warnings
+            .add_directive("html5ever=error".parse().unwrap())
             .add_directive("article_extractor=info".parse()?)
+            .add_directive("warn".parse().unwrap())
             .add_directive("info".parse()?))
         .init();
 
@@ -407,10 +399,6 @@ async fn train_command(
         "fast" | "gpu" => {
             info!("Using GPU-optimized configuration");
             Config::gpu_optimized()
-        }
-        "rtx3080" => {
-            info!("Using RTX 3080-optimized configuration");
-            Config::rtx_3080_optimized()
         }
         _ => {
             info!("Using default configuration");

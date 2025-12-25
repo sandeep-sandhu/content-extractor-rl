@@ -24,7 +24,7 @@ mod integration_tests {
             config.gamma as f32,
             config.learning_rate,
             &device,
-            candle_nn::VarBuilder::zeros(candle_core::DType::F32, &device),
+            candle_nn::VarMap::new(),
         ).unwrap();
 
         // Test action selection before save
@@ -75,7 +75,7 @@ mod integration_tests {
             config.gamma as f32,
             config.learning_rate,
             &device,
-            candle_nn::VarBuilder::zeros(candle_core::DType::F32, &device),
+            candle_nn::VarMap::new(),
         ).unwrap();
 
         // Simulate some training (just to modify weights)
@@ -122,7 +122,7 @@ mod integration_tests {
                 0.95,
                 0.001,
                 &device,
-                candle_nn::VarBuilder::zeros(candle_core::DType::F32, &device),
+                candle_nn::VarMap::new(),
             ).unwrap();
 
             // Save
@@ -208,7 +208,7 @@ mod integration_tests {
             config.gamma as f32,
             config.learning_rate,
             &device_save,
-            candle_nn::VarBuilder::zeros(candle_core::DType::F32, &device_save),
+            candle_nn::VarMap::new(),
         ).unwrap();
 
         agent.save(&model_path).unwrap();
@@ -243,7 +243,7 @@ mod integration_tests {
             config.gamma as f32,
             config.learning_rate,
             &device,
-            candle_nn::VarBuilder::zeros(candle_core::DType::F32, &device),
+            candle_nn::VarMap::new(),
         ).unwrap();
 
         let state = vec![0.75f32; config.state_dim];

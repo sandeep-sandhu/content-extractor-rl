@@ -85,7 +85,6 @@ pub fn train_standard(
     };
 
     let varmap = VarMap::new();
-    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     // Initialize components
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
@@ -103,7 +102,7 @@ pub fn train_standard(
         config.gamma as f32,
         config.learning_rate,
         &device,
-        vb.clone(),
+        varmap, // Pass the VarMap, not VarBuilder
     )?;
 
     // VERIFY initialization
@@ -390,7 +389,6 @@ pub fn train_with_improvements(
         Device::Cpu
     };
     let varmap = VarMap::new();
-    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     // step counters:
     let mut global_step:usize = 0;
@@ -412,7 +410,7 @@ pub fn train_with_improvements(
         config.gamma as f32,
         config.learning_rate,
         &device,
-        vb.clone(),
+        varmap,
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor.clone(), config.clone());
