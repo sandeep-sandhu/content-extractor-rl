@@ -1,22 +1,22 @@
 use article_extractor::{
-Config, BaselineExtractor, DQNAgent,
-ExtractedArticle, BatchExtractionResult, Result,
-train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace,
-Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator,
-TrainingPlotter,
+    Config, BaselineExtractor, DQNAgent,
+    ExtractedArticle, BatchExtractionResult, Result,
+    train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace,
+    Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator,
+    TrainingPlotter,
 };
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing::{info, error, warn};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::time::Instant;
 use bzip2::read::BzDecoder;
-use rand::seq::SliceRandom;
-
-// Helper function to create separator string
-fn separator() -> String {
-    "=".repeat(80)
-}
+use std::env;
+use std::time::Instant;
+use tracing::{info, error, warn};
+use tracing_subscriber::{fmt, prelude::*};
+use tracing_subscriber::EnvFilter;
+use tracing_appender::{non_blocking, rolling};
+use chrono::{Local};
+use std::error::Error;
 
 #[derive(Parser)]
 #[command(name = "article-extractor")]
@@ -184,17 +184,102 @@ enum Commands {
     },
 }
 
+
+// Helper function to create separator string
+fn separator() -> String {
+    "=".repeat(80)
+}
+
+
+fn setup_logging(command_type: &str) -> std::result::Result<non_blocking::WorkerGuard, Box<dyn Error>> {
+
+    // Initialize tracing with custom filter to suppress html5ever warnings
+    let filter = EnvFilter::new("article_extractor=info")
+        // Suppress html5ever warnings
+        .add_directive("html5ever=error".parse().unwrap())
+        // Keep other important warnings
+        .add_directive("warn".parse().unwrap());
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .init();
+
+    // Create log directory
+    let log_dir = env::current_dir()?.join("logs");
+    std::fs::create_dir_all(&log_dir)?;
+
+    // Create timestamp for log file (using local time for filename)
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+    // Use consistent naming based on command type
+    let log_file = match command_type {
+        "train" => format!("training_{}.log", timestamp),
+        "tune" => format!("tuning_{}.log", timestamp),
+        "extract" => format!("extraction_{}.log", timestamp),
+        "extract_batch" => format!("batch_extraction_{}.log", timestamp),
+        "evaluate" => format!("evaluation_{}.log", timestamp),
+        _ => format!("article_extractor_{}.log", timestamp),
+    };
+    // Set up file appender
+    let file_appender = rolling::never(&log_dir, log_file);
+    let (non_blocking_file, file_guard) = non_blocking(file_appender);
+
+    // Set up console appender
+    let (non_blocking_console, _console_guard) = non_blocking(std::io::stdout());
+
+    // Configure file logging layer with UTC time but readable format
+    let file_layer = fmt::layer()
+        .with_writer(non_blocking_file)
+        .with_ansi(false)
+        .with_target(true)
+        .with_level(true)
+        //.with_line_number(true)
+        //.with_file(true)
+        .with_thread_ids(false)
+        .with_timer(fmt::time::UtcTime::rfc_3339()); // Use RFC3339 format for UTC
+
+    // Configure console logging layer with local time-like format
+    let console_layer = fmt::layer()
+        .with_writer(non_blocking_console)
+        .with_ansi(true)
+        .with_target(false)  // Hide target for cleaner console output
+        .with_level(true)
+        //.with_line_number(false)
+        //.with_file(false)
+        .with_thread_ids(false)
+        .with_timer(fmt::time::UtcTime::rfc_3339());
+
+    // Initialize tracing
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .with(console_layer)
+        .with(tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive("article_extractor=info".parse()?)
+            .add_directive("info".parse()?))
+        .init();
+
+    Ok(file_guard)
+}
+
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter("article_extractor=info")
-        .init();
+    let cli = Cli::parse();
+
+    let command_type = match &cli.command {
+        Commands::Train { .. } => "train",
+        Commands::Tune { .. } => "tune",
+        Commands::Extract { .. } => "extract",
+        Commands::ExtractBatch { .. } => "extract_batch",
+        Commands::Evaluate { .. } => "evaluate",
+    };
+
+    // Set up logging - keep guard to prevent early drop
+    let _log_guard = setup_logging(command_type).map_err(|e| {
+        article_extractor::ExtractionError::ParseError(format!("Failed to setup logging: {}", e))
+    })?;
 
     // Print device info
     article_extractor::print_device_info();
-
-    let cli = Cli::parse();
 
     match cli.command {
         Commands::Extract { html_file, url, model, site_profile, output } => {
@@ -232,63 +317,18 @@ async fn extract_command(
     _site_profile_path: Option<PathBuf>,
     output: Option<PathBuf>,
 ) -> Result<()> {
-    info!("Extracting article from: {}", html_file.display());
-
-    // Read HTML
-    let html_content = std::fs::read_to_string(&html_file)?;
-
-    // Load configuration
     let config = Config::from_env()
         .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
 
-    // Initialize extractor
-    let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
+    let article = article_extractor::extract_single(
+        &html_file,
+        url,
+        model_path.as_deref(),
+        output.as_deref(),
+        &config,
+    )?;
 
-    // Try to use RL model if available
-    let result = if let Some(model_path) = model_path {
-        info!("Using RL model: {}", model_path.display());
-
-        let device = article_extractor::get_device();
-        let _agent = DQNAgent::load_with_device(
-            &model_path,
-            config.state_dim,
-            config.num_discrete_actions,
-            config.num_continuous_params,
-            &device,
-        )?;
-
-        // Use agent for extraction (simplified)
-        baseline_extractor.extract(&html_content)?
-    } else {
-        info!("Using baseline extractor");
-        baseline_extractor.extract(&html_content)?
-    };
-
-    // Create extracted article
-    let article = ExtractedArticle {
-        url: url.clone(),
-        title: None,
-        date: None,
-        content: result.text,
-        quality_score: result.quality_score,
-        method: "baseline".to_string(),
-        xpath: Some(result.xpath),
-    };
-
-    // Output result
-    let output_path = output.unwrap_or_else(|| {
-        config.output_dir.join(format!("article_{}.json", chrono::Utc::now().timestamp()))
-    });
-
-    let batch_result = BatchExtractionResult {
-        articles: vec![article],
-    };
-
-    let json = serde_json::to_string_pretty(&batch_result)?;
-    std::fs::write(&output_path, json)?;
-
-    info!("Extraction saved to: {}", output_path.display());
-
+    info!("Extracted article with quality: {:.3}", article.quality_score);
     Ok(())
 }
 
@@ -299,107 +339,41 @@ async fn extract_batch_command(
     max_files: Option<usize>,
     batch_size: usize,
 ) -> Result<()> {
-    info!("{}", separator());
-    info!("BATCH EXTRACTION MODE");
-    info!("{}", separator());
-    info!("Archive directory: {}", archive_dir.display());
-    info!("Batch size: {}", batch_size);
-
     let config = Config::from_env()
         .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
 
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
-    std::fs::create_dir_all(&output_dir)?;
 
-    // Load HTML files recursively
-    let html_files = load_html_files_recursive(&archive_dir, max_files)?;
-    info!("Found {} HTML files", html_files.len());
+    let result = article_extractor::extract_batch(
+        &archive_dir,
+        model_path.as_deref(),
+        &output_dir,
+        max_files,
+        batch_size,
+        &config,
+    )?;
 
-    if html_files.is_empty() {
-        error!("No HTML files found in {}", archive_dir.display());
-        return Ok(());
-    }
+    info!("Extracted {} articles", result.articles.len());
+    Ok(())
+}
 
-    // Initialize extractor
-    let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
-    let device = article_extractor::get_device();
-    let agent = if let Some(ref path) = model_path {
-        Some(DQNAgent::load_with_device(
-            path,
-            config.state_dim,
-            config.num_discrete_actions,
-            config.num_continuous_params,
-            &device,
-        )?)
-    } else {
-        None
-    };
-
-    // Process in batches with progress bar
-    let pb = ProgressBar::new(html_files.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
-            .unwrap()
-            .progress_chars("=>-"),
-    );
-
-    let mut all_articles = Vec::new();
-    let mut failed = Vec::new();
-
-    for chunk in html_files.chunks(batch_size) {
-        for (html_path, url) in chunk {
-            match std::fs::read_to_string(html_path) {
-                Ok(html_content) => {
-                    match baseline_extractor.extract(&html_content) {
-                        Ok(result) => {
-                            let article = ExtractedArticle {
-                                url: url.clone(),
-                                title: None,
-                                date: None,
-                                content: result.text,
-                                quality_score: result.quality_score,
-                                method: if agent.is_some() { "rl" } else { "baseline" }.to_string(),
-                                xpath: Some(result.xpath),
-                            };
-                            all_articles.push(article);
-                        }
-                        Err(e) => {
-                            failed.push((url.clone(), e.to_string()));
-                        }
-                    }
-                }
-                Err(e) => {
-                    failed.push((url.clone(), e.to_string()));
-                }
+// Helper function to read URL from JSON file
+fn get_url_from_json(json_path: &PathBuf) -> String {
+    match std::fs::read_to_string(json_path) {
+        Ok(json_content) => {
+            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&json_content) {
+                json_value.get("URL")
+                    .and_then(|u| u.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "https://unknown/unknown".to_string())
+            } else {
+                "https://unknown/invalid-json".to_string()
             }
-            pb.inc(1);
+        }
+        Err(_) => {
+            "https://unknown/no-json".to_string()
         }
     }
-
-    pb.finish_with_message("Batch extraction complete");
-
-    // Save results
-    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let results_path = output_dir.join(format!("batch_results_{}.json", timestamp));
-    let batch_result = BatchExtractionResult { articles: all_articles.clone() };
-    let json = serde_json::to_string_pretty(&batch_result)?;
-    std::fs::write(&results_path, json)?;
-
-    // Save failed extractions
-    if !failed.is_empty() {
-        let failed_path = output_dir.join(format!("failed_{}.json", timestamp));
-        let failed_json = serde_json::to_string_pretty(&failed)?;
-        std::fs::write(&failed_path, failed_json)?;
-        warn!("Failed extractions saved to: {}", failed_path.display());
-    }
-
-    info!("{}", separator());
-    info!("Batch extraction complete: {}/{} successful", all_articles.len(), html_files.len());
-    info!("Results saved to: {}", results_path.display());
-    info!("{}", separator());
-
-    Ok(())
 }
 
 async fn train_command(
@@ -416,7 +390,7 @@ async fn train_command(
     train_steps_override: Option<usize>,
     metrics_window_override: Option<usize>,
     mlflow: bool,
-    mlflow_uri: Option<String>,
+    _mlflow_uri: Option<String>,
 ) -> Result<()> {
     info!("{}", separator());
     info!("TRAINING MODE");
@@ -538,7 +512,7 @@ async fn train_command(
     }
 
     // Initialize MLflow if enabled
-    #[cfg(feature = "mlflow-rs")]
+    #[cfg(feature = "mlflow")]
     let mut mlflow_tracker = if mlflow {
         let uri = mlflow_uri.or_else(|| std::env::var("MLFLOW_TRACKING_URI").ok());
         article_extractor::mlflow::MlflowTracker::new(uri)
@@ -546,7 +520,7 @@ async fn train_command(
         article_extractor::mlflow::MlflowTracker::new(None)
     };
 
-    #[cfg(feature = "mlflow-rs")]
+    #[cfg(feature = "mlflow")]
     if mlflow_tracker.is_enabled() {
         mlflow_tracker.start_run(Some(format!("training_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"))))?;
 
@@ -583,7 +557,7 @@ async fn train_command(
     plotter.plot_training_results(&metrics, &plot_path)?;
 
     // Log to MLflow
-    #[cfg(feature = "mlflow-rs")]
+    #[cfg(feature = "mlflow")]
     if mlflow_tracker.is_enabled() {
         mlflow_tracker.log_training_metrics(&metrics, episodes)?;
         mlflow_tracker.log_artifact(&plot_path)?;
@@ -794,7 +768,7 @@ async fn evaluate_command(
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
     let evaluator = GroundTruthEvaluator::new(config.stopwords.clone());
 
-    let agent = if let Some(ref path) = model_path {
+    let _agent = if let Some(ref path) = model_path {
         Some(DQNAgent::load(path, config.state_dim, config.num_discrete_actions, config.num_continuous_params)?)
     } else {
         None
@@ -865,7 +839,7 @@ async fn evaluate_command(
 
 // Helper functions
 
-fn load_html_files_recursive(dir: &PathBuf, max_files: Option<usize>) -> Result<Vec<(PathBuf, String)>> {
+fn load_html_files_recursive(dir: &PathBuf, max_files: Option<usize>) -> Result<Vec<(PathBuf, PathBuf)>> {
     let mut files = Vec::new();
 
     for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
@@ -879,17 +853,17 @@ fn load_html_files_recursive(dir: &PathBuf, max_files: Option<usize>) -> Result<
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "bz2" && path.to_string_lossy().contains(".html.") {
-                    let url = path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .map(|s| format!("https://example.com/{}", s))
-                        .unwrap_or_default();
-                    files.push((path.to_path_buf(), url));
+                    // Look for corresponding JSON file
+                    let json_path = path.with_extension("").with_extension("json");
+                    if json_path.exists() {
+                        files.push((path.to_path_buf(), json_path));
+                    }
                 } else if ext == "html" || ext == "htm" {
-                    let url = path.file_stem()
-                        .and_then(|s| s.to_str())
-                        .map(|s| format!("https://example.com/{}", s))
-                        .unwrap_or_default();
-                    files.push((path.to_path_buf(), url));
+                    // Look for corresponding JSON file
+                    let json_path = path.with_extension("json");
+                    if json_path.exists() {
+                        files.push((path.to_path_buf(), json_path));
+                    }
                 }
             }
         }
@@ -902,16 +876,31 @@ fn load_html_samples(dir: &PathBuf, max_samples: Option<usize>) -> Result<Vec<(S
     let files = load_html_files_recursive(dir, max_samples)?;
     let mut samples = Vec::new();
 
-    for (path, url) in files {
-        let content = if path.extension().and_then(|s| s.to_str()) == Some("bz2") {
+    for (html_path, json_path) in files {
+        // Read HTML content
+        let content = if html_path.extension().and_then(|s| s.to_str()) == Some("bz2") {
             // Decompress bz2 file
-            let file = std::fs::File::open(&path)?;
+            let file = std::fs::File::open(&html_path)?;
             let mut decoder = BzDecoder::new(file);
             let mut html = String::new();
             std::io::Read::read_to_string(&mut decoder, &mut html)?;
             html
         } else {
-            std::fs::read_to_string(&path)?
+            std::fs::read_to_string(&html_path)?
+        };
+
+        // Read URL from JSON file
+        let url = if let Ok(json_content) = std::fs::read_to_string(&json_path) {
+            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&json_content) {
+                json_value.get("URL")
+                    .and_then(|u| u.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "https://example.com/unknown".to_string())
+            } else {
+                "https://example.com/invalid-json".to_string()
+            }
+        } else {
+            "https://example.com/no-json".to_string()
         };
 
         samples.push((content, url));

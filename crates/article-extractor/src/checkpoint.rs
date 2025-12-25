@@ -119,7 +119,7 @@ impl CheckpointManager {
     }
 
     /// List all checkpoints
-    fn list_checkpoints(&self) -> Result<Vec<Checkpoint>> {
+    pub fn list_checkpoints(&self) -> Result<Vec<Checkpoint>> {
         let mut checkpoints = Vec::new();
 
         for entry in fs::read_dir(&self.checkpoints_dir)? {

@@ -17,8 +17,8 @@ pub fn get_device() -> Device {
         if candle_core::utils::cuda_is_available() {
             match Device::new_cuda(0) {
                 Ok(device) => {
-                    println!("Using CUDA device (GPU)");
-                    println!("Training will use GPU acceleration");
+                    info!("Using CUDA device (GPU)");
+                    info!("Training will use GPU acceleration");
                     return device;
                 }
                 Err(e) => {
@@ -74,29 +74,48 @@ pub fn get_device_info(device: &Device) -> String {
     }
 }
 
-/// Print device information
+/// get device information
+pub fn get_device_info_string(device: &Device) -> String {
+    let build_info = if cfg!(feature = "cuda") {
+        "CUDA support enabled"
+    } else {
+        "CUDA support disabled"
+    };
+
+    let runtime_info = match device {
+        Device::Cuda(_) => "CUDA GPU",
+        Device::Cpu => "CPU",
+        _ => "Other device",
+    };
+
+    let status = match device {
+        Device::Cuda(_) => "GPU acceleration active",
+        Device::Cpu => "Running on CPU",
+        _ => "Unknown device",
+    };
+
+    format!(
+        "\n\
+         ╔════════════════════════════════════════╗\n\
+         ║   Article Extractor - Device Info      ║\n\
+         ╠════════════════════════════════════════╣\n\
+         ║ Build: {:<31} ║\n\
+         ║ Runtime: {:<29} ║\n\
+         ║ Status: {:<30} ║\n\
+         ╚════════════════════════════════════════╝",
+        build_info, runtime_info, status
+    )
+}
+
 pub fn print_device_info() {
     let device = get_device();
-    let info = get_device_info(&device);
+    println!("{}", get_device_info_string(&device));
+}
 
-    println!("╔════════════════════════════════════════╗");
-    println!("║   Article Extractor - Device Info      ║");
-    println!("╠════════════════════════════════════════╣");
-
-    #[cfg(feature = "cuda")]
-    println!("║ Build: CUDA support enabled            ║");
-    #[cfg(not(feature = "cuda"))]
-    println!("║ Build: CPU only (no CUDA)              ║");
-
-    println!("║ Runtime: {:<30}║", info);
-
-    if cuda_is_available() {
-        println!("║ Status:   GPU acceleration active      ║");
-    } else {
-        println!("║ Status:   CPU mode                    ║");
-    }
-
-    println!("╚════════════════════════════════════════╝");
+// Add new function for logging only
+pub fn log_device_info() {
+    let device = get_device();
+    tracing::info!("{}", get_device_info_string(&device));
 }
 
 #[cfg(test)]

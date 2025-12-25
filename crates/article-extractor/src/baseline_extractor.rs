@@ -4,6 +4,8 @@ use crate::html_parser::HtmlParser;
 use crate::site_profile::ExtractionResult;
 use crate::Result;
 use std::collections::HashSet;
+use chrono::{NaiveDate, NaiveDateTime};
+use regex::Regex;
 
 /// Baseline article extractor using heuristics
 #[derive(Clone)]
@@ -19,6 +21,10 @@ impl BaselineExtractor {
 
     /// Extract article from HTML
     pub fn extract(&self, html: &str) -> Result<ExtractionResult> {
+        // Extract metadata first
+        let title = MetadataExtractor::extract_title(html);
+        let date = MetadataExtractor::extract_date(html);
+
         let document = HtmlParser::clean_html(html)?;
         let candidates = self.get_candidates(&document);
 
@@ -28,10 +34,11 @@ impl BaselineExtractor {
                 xpath: String::new(),
                 quality_score: 0.0,
                 parameters: std::collections::HashMap::new(),
+                title,
+                date,
             });
         }
 
-        // Find best candidate
         let (best_node, _score) = candidates.into_iter()
             .max_by(|(_, score_a), (_, score_b)| {
                 score_a.partial_cmp(score_b).unwrap_or(std::cmp::Ordering::Equal)
@@ -47,6 +54,8 @@ impl BaselineExtractor {
             xpath,
             quality_score: quality,
             parameters: std::collections::HashMap::new(),
+            title,
+            date,
         })
     }
 
@@ -139,9 +148,275 @@ impl BaselineExtractor {
     }
 }
 
+
+/// Extract metadata (title, date, author) from HTML
+pub struct MetadataExtractor;
+
+impl MetadataExtractor {
+    /// Extract title from HTML
+    pub fn extract_title(html: &str) -> Option<String> {
+        let document = Html::parse_document(html);
+
+        // Try multiple strategies in order of preference
+
+        // 1. OpenGraph meta tag
+        if let Some(title) = Self::extract_meta_tag(&document, "og:title") {
+            return Some(title);
+        }
+
+        // 2. Twitter card meta tag
+        if let Some(title) = Self::extract_meta_tag(&document, "twitter:title") {
+            return Some(title);
+        }
+
+        // 3. Article title meta tag
+        if let Some(title) = Self::extract_meta_tag(&document, "article:title") {
+            return Some(title);
+        }
+
+        // 4. Standard <title> tag
+        if let Ok(selector) = Selector::parse("title") {
+            if let Some(title_elem) = document.select(&selector).next() {
+                let title = title_elem.text().collect::<String>().trim().to_string();
+                if !title.is_empty() {
+                    return Some(Self::clean_title(&title));
+                }
+            }
+        }
+
+        // 5. h1 tag (often the article title)
+        if let Ok(selector) = Selector::parse("h1") {
+            if let Some(h1_elem) = document.select(&selector).next() {
+                let title = h1_elem.text().collect::<String>().trim().to_string();
+                if !title.is_empty() && title.len() > 10 {
+                    return Some(title);
+                }
+            }
+        }
+
+        // 6. article > header > h1
+        if let Ok(selector) = Selector::parse("article header h1, article h1") {
+            if let Some(elem) = document.select(&selector).next() {
+                let title = elem.text().collect::<String>().trim().to_string();
+                if !title.is_empty() && title.len() > 10 {
+                    return Some(title);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Extract publication date from HTML
+    pub fn extract_date(html: &str) -> Option<String> {
+        let document = Html::parse_document(html);
+
+        // Try multiple strategies
+
+        // 1. OpenGraph meta tag
+        if let Some(date) = Self::extract_meta_tag(&document, "article:published_time") {
+            if let Some(normalized) = Self::normalize_date(&date) {
+                return Some(normalized);
+            }
+        }
+
+        // 2. Schema.org meta tags
+        if let Some(date) = Self::extract_meta_tag(&document, "datePublished") {
+            if let Some(normalized) = Self::normalize_date(&date) {
+                return Some(normalized);
+            }
+        }
+
+        // 3. Standard meta tags
+        for name in &["pubdate", "publishdate", "date", "DC.date"] {
+            if let Some(date) = Self::extract_meta_tag(&document, name) {
+                if let Some(normalized) = Self::normalize_date(&date) {
+                    return Some(normalized);
+                }
+            }
+        }
+
+        // 4. time tag with datetime attribute
+        if let Ok(selector) = Selector::parse("time[datetime], time[pubdate]") {
+            if let Some(time_elem) = document.select(&selector).next() {
+                if let Some(datetime) = time_elem.value().attr("datetime")
+                    .or_else(|| time_elem.value().attr("pubdate")) {
+                    if let Some(normalized) = Self::normalize_date(datetime) {
+                        return Some(normalized);
+                    }
+                }
+            }
+        }
+
+        // 5. Common date patterns in text
+        if let Some(date) = Self::extract_date_from_text(html) {
+            return Some(date);
+        }
+
+        None
+    }
+
+    /// Extract meta tag content
+    fn extract_meta_tag(document: &Html, property: &str) -> Option<String> {
+        // Try property attribute
+        let selector_str = format!("meta[property='{}']", property);
+        if let Ok(selector) = Selector::parse(&selector_str) {
+            if let Some(elem) = document.select(&selector).next() {
+                if let Some(content) = elem.value().attr("content") {
+                    return Some(content.to_string());
+                }
+            }
+        }
+
+        // Try name attribute
+        let selector_str = format!("meta[name='{}']", property);
+        if let Ok(selector) = Selector::parse(&selector_str) {
+            if let Some(elem) = document.select(&selector).next() {
+                if let Some(content) = elem.value().attr("content") {
+                    return Some(content.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Clean title by removing site name suffixes
+    fn clean_title(title: &str) -> String {
+        // Common separators between title and site name
+        let separators = [" - ", " | ", " – ", " — ", " :: ", " » "];
+
+        for sep in &separators {
+            if let Some(pos) = title.rfind(sep) {
+                let cleaned = &title[..pos];
+                if cleaned.len() > 10 {
+                    return cleaned.trim().to_string();
+                }
+            }
+        }
+
+        title.trim().to_string()
+    }
+
+    /// Normalize date to ISO 8601 format
+    fn normalize_date(date_str: &str) -> Option<String> {
+        // Already in ISO format
+        if date_str.contains('T') || date_str.contains("Z") {
+            return Some(date_str.to_string());
+        }
+
+        // Try parsing common formats
+        let formats = [
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+            "%d-%m-%Y",
+            "%d/%m/%Y",
+            "%B %d, %Y",
+            "%b %d, %Y",
+            "%d %B %Y",
+            "%d %b %Y",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+        ];
+
+        for format in &formats {
+            if let Ok(parsed) = NaiveDate::parse_from_str(date_str, format) {
+                return Some(parsed.format("%Y-%m-%d").to_string());
+            }
+            if let Ok(parsed) = NaiveDateTime::parse_from_str(date_str, format) {
+                return Some(parsed.format("%Y-%m-%d").to_string());
+            }
+        }
+
+        None
+    }
+
+    /// Extract date from common text patterns
+    fn extract_date_from_text(html: &str) -> Option<String> {
+        lazy_static::lazy_static! {
+            static ref DATE_PATTERNS: Vec<Regex> = vec![
+                // ISO format: 2021-04-05
+                Regex::new(r"(\d{4}-\d{2}-\d{2})").unwrap(),
+                // US format: April 5, 2021
+                Regex::new(r"([A-Z][a-z]+ \d{1,2}, \d{4})").unwrap(),
+                // European: 5 April 2021
+                Regex::new(r"(\d{1,2} [A-Z][a-z]+ \d{4})").unwrap(),
+            ];
+        }
+
+        for pattern in DATE_PATTERNS.iter() {
+            if let Some(captures) = pattern.captures(html) {
+                if let Some(matched) = captures.get(1) {
+                    if let Some(normalized) = Self::normalize_date(matched.as_str()) {
+                        return Some(normalized);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_extract_title_from_og_tag() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta property="og:title" content="Test Article Title" />
+                </head>
+            </html>
+        "#;
+
+        let title = MetadataExtractor::extract_title(html);
+        assert_eq!(title, Some("Test Article Title".to_string()));
+    }
+
+    #[test]
+    fn test_extract_title_from_title_tag() {
+        let html = r#"
+            <html>
+                <head>
+                    <title>Test Article - Site Name</title>
+                </head>
+            </html>
+        "#;
+
+        let title = MetadataExtractor::extract_title(html);
+        assert_eq!(title, Some("Test Article".to_string()));
+    }
+
+    #[test]
+    fn test_extract_date_from_meta() {
+        let html = r#"
+            <html>
+                <head>
+                    <meta property="article:published_time" content="2021-04-05T10:30:00Z" />
+                </head>
+            </html>
+        "#;
+
+        let date = MetadataExtractor::extract_date(html);
+        assert!(date.is_some());
+    }
+
+    #[test]
+    fn test_normalize_date() {
+        assert_eq!(
+            MetadataExtractor::normalize_date("2021-04-05"),
+            Some("2021-04-05".to_string())
+        );
+
+        assert_eq!(
+            MetadataExtractor::normalize_date("April 5, 2021"),
+            Some("2021-04-05".to_string())
+        );
+    }
 
     #[test]
     fn test_baseline_extractor() {

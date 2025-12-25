@@ -121,7 +121,7 @@ impl Config {
         let mut config = Self::default();
 
         // GPU-specific optimizations
-        config.batch_size = 1024;                    // Larger but not excessive
+        config.batch_size = 2048;                    // Larger but not excessive
         config.num_train_steps_per_episode = 8;     // More gradient updates
         config.train_freq = 2;                       // Train more frequently
         config.max_html_samples = 3000;              // Even smaller dataset
@@ -135,15 +135,19 @@ impl Config {
         let mut config = Self::default();
 
         // Maximize GPU utilization for RTX 3080 Ti / similar
-        config.batch_size = 2048;                    // Use more GPU memory
-        config.num_train_steps_per_episode = 16;    // Many gradient updates per episode
+        config.batch_size = 8192;                    // Much larger batches
+        config.num_train_steps_per_episode = 32;    // Many gradient updates
         config.train_freq = 1;                       // Train every step
-        config.replay_buffer_size = 200000;          // Larger buffer
-        config.min_replay_size = 10000;              // More initial experiences
-        config.max_html_samples = 2000;              // Smaller, diverse dataset
-        config.metrics_window = 25;
+        config.replay_buffer_size = 500000;          // Larger buffer
+        config.min_replay_size = 20000;              // More warmup
+        config.max_html_samples = 10000;             // Larger dataset
+        config.sample_batch_load_size = 2000;
+
+        // Aggressive learning
+        config.learning_rate = 0.00183;                 // Higher LR
+        config.target_update_freq = 100;             // Frequent updates
+        config.metrics_window = 50;
         config.checkpoint_freq = 250;
-        config.target_update_freq = 250;
 
         config
     }

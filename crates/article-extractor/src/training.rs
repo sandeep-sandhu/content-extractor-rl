@@ -16,40 +16,48 @@ use std::path::Path;
 use tracing::{info, warn};
 use crate::{Checkpoint, CheckpointManager};
 use candle_core::DType;
-use candle_nn::VarBuilder;
+use candle_nn::{VarBuilder, VarMap};
 use candle_core::Device;
-use crate::evaluation::GroundTruthData;
 
-/// Extract domain from ground truth JSON file
-fn get_domain_from_ground_truth(html_path: &Path) -> Result<String> {
-    // Look for accompanying .json file
-    let json_path = html_path.with_extension("json");
 
-    if json_path.exists() {
-        match GroundTruthData::load(&json_path) {
-            Ok(gt_data) => {
-                let url = gt_data.get_url();
-                if !url.is_empty() {
-                    if let Ok(parsed_url) = url::Url::parse(url) {
-                        if let Some(domain) = parsed_url.host_str() {
-                            return Ok(domain.to_string());
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("Failed to load ground truth for domain extraction: {}", e);
+/// Extract domain from URL
+/// The second element of html_samples is now the actual URL from JSON
+fn extract_domain_from_url(url: &str) -> String {
+    use url::Url;
+
+    // Parse the URL to extract domain
+    match Url::parse(url) {
+        Ok(parsed_url) => {
+            parsed_url.host_str()
+                .map(|h| h.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        }
+        Err(_) => {
+            // If URL parsing fails, try to extract domain directly
+            let url = url.trim();
+            let without_protocol = if url.starts_with("https://") {
+                &url[8..]
+            } else if url.starts_with("http://") {
+                &url[7..]
+            } else {
+                url
+            };
+
+            // Split by '/' to get the host part
+            let host_part = without_protocol.split('/').next().unwrap_or("");
+
+            // Split by ':' to remove port (if any)
+            let domain = host_part.split(':').next().unwrap_or("");
+
+            if domain.is_empty() {
+                "unknown".to_string()
+            } else {
+                domain.to_string()
             }
         }
     }
-
-    // Fallback: try to extract from filename or use "unknown"
-    html_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| ExtractionError::ParseError("Cannot determine domain".to_string()))
 }
+
 
 /// Training metrics
 #[derive(Debug, Clone, Default)]  // Add Default derive
@@ -69,14 +77,15 @@ pub fn train_standard(
     info!("Starting standard training for {} episodes", config.num_episodes);
 
     let device = if config.use_cpu_for_tuning {
-        Device::Cpu  // Force CPU for hyperparameter tuning
+        Device::Cpu
     } else if crate::cuda_is_available() {
         Device::cuda_if_available(0).unwrap_or(Device::Cpu)
     } else {
         Device::Cpu
     };
 
-    let vb = VarBuilder::zeros(DType::F32, &device);
+    let varmap = VarMap::new();
+    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
 
     // Initialize components
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
@@ -97,34 +106,72 @@ pub fn train_standard(
         vb.clone(),
     )?;
 
+    // VERIFY initialization
+    if !agent.online_network.verify_initialization()? {
+        return Err(ExtractionError::ModelError(
+            "Model initialization failed - weights are all zeros!".to_string()
+        ));
+    }
+    info!("Model initialized successfully with non-zero weights");
+
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor, config.clone());
-    let mut metrics = TrainingMetrics { episode_rewards: vec![], episode_qualities: vec![], episode_losses: vec![], best_avg_quality: 0.0 };
+    let mut metrics = TrainingMetrics::default();
     let mut epsilon = config.epsilon_start;
 
     // Initialize checkpoint manager
     let checkpoint_dir = config.models_dir.join("checkpoints");
     let checkpoint_manager = CheckpointManager::new(checkpoint_dir, 5)?;
 
-    // Try to resume from checkpoint
-    let start_episode = if let Some(checkpoint) = checkpoint_manager.load_latest()? {
-        info!("Resuming from checkpoint at episode {}", checkpoint.episode);
-        epsilon = checkpoint.epsilon as f64;
-        metrics.best_avg_quality = checkpoint.best_quality;
+    // CRITICAL FIX: Only resume if checkpoint is valid and from compatible run
+    let start_episode = match checkpoint_manager.load_latest() {
+        Ok(Some(checkpoint)) => {
+            // VALIDATION: Check if checkpoint is compatible
+            if checkpoint.episode >= config.num_episodes {
+                warn!(
+                    "Found checkpoint at episode {} but current run is only {} episodes. Starting fresh.",
+                    checkpoint.episode, config.num_episodes
+                );
+                0
+            } else if !checkpoint.model_path.exists() {
+                warn!(
+                    "Checkpoint references missing model file: {}. Starting fresh.",
+                    checkpoint.model_path.display()
+                );
+                0
+            } else {
+                // Try to load the model
+                info!("Found checkpoint at episode {}, attempting to load...", checkpoint.episode);
 
-        // Load model
-        if checkpoint.model_path.exists() {
-            agent = DQNAgent::load_with_device(
-                &checkpoint.model_path,
-                config.state_dim,
-                config.num_discrete_actions,
-                config.num_continuous_params,
-                &device,  // Explicitly specify device
-            )?;
+                match DQNAgent::load_with_device(
+                    &checkpoint.model_path,
+                    config.state_dim,
+                    config.num_discrete_actions,
+                    config.num_continuous_params,
+                    &device,
+                ) {
+                    Ok(loaded_agent) => {
+                        agent = loaded_agent;
+                        epsilon = checkpoint.epsilon as f64;
+                        metrics.best_avg_quality = checkpoint.best_quality;
+                        info!("Successfully resumed from checkpoint at episode {}", checkpoint.episode);
+                        checkpoint.episode
+                    }
+                    Err(e) => {
+                        warn!("Failed to load checkpoint model: {}. Starting fresh.", e);
+                        warn!("Consider deleting checkpoint directory if corruption persists.");
+                        0
+                    }
+                }
+            }
         }
-
-        checkpoint.episode
-    } else {
-        0
+        Ok(None) => {
+            info!("No checkpoint found, starting fresh training");
+            0
+        }
+        Err(e) => {
+            warn!("Error loading checkpoint: {}. Starting fresh.", e);
+            0
+        }
     };
 
     // Progress bar
@@ -141,18 +188,7 @@ pub fn train_standard(
         let idx = episode % html_samples.len();
         let (html, url) = &html_samples[idx];
 
-        // FIXED: Extract domain from ground truth JSON if available
-        let domain = if let Ok(parsed_url) = url::Url::parse(url) {
-            if let Some(host) = parsed_url.host_str() {
-                host.to_string()
-            } else {
-                "unknown".to_string()
-            }
-        } else {
-            // Try to get from ground truth JSON
-            get_domain_from_ground_truth(Path::new(url))
-                .unwrap_or_else(|_| "unknown".to_string())
-        };
+        let domain = extract_domain_from_url(url);
 
         let site_profile = site_memory.get_profile(&domain);
 
@@ -204,6 +240,8 @@ pub fn train_standard(
             xpath: step_info.xpath.clone(),
             quality_score: step_info.quality_score,
             parameters: step_info.parameters.clone(),
+            title: None,
+            date: None,
         };
         profile.add_extraction(extraction_result);
 
@@ -237,48 +275,78 @@ pub fn train_standard(
         }
         pb.inc(1);
 
-        // Save checkpoint every 1000 episodes
-        if episode % 1000 == 0 && episode > 0 {
+        // Save checkpoint every 1000 episodes (only for long runs)
+        if episode % 1000 == 0 && episode > 0 && config.num_episodes >= 5000 {
             let checkpoint_path = config.models_dir.join(format!("checkpoint_ep{}.onnx", episode));
-            agent.save(&checkpoint_path)?;
 
-            let avg_reward = if metrics.episode_rewards.len() >= 100 {
-                metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
-                    .iter()
-                    .sum::<f32>() / 100.0
-            } else {
-                0.0
-            };
+            // Validate save was successful
+            match agent.save(&checkpoint_path) {
+                Ok(_) => {
+                    let avg_reward = if metrics.episode_rewards.len() >= 100 {
+                        metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
+                            .iter()
+                            .sum::<f32>() / 100.0
+                    } else {
+                        0.0
+                    };
 
-            let avg_quality = if metrics.episode_qualities.len() >= 100 {
-                metrics.episode_qualities[metrics.episode_qualities.len() - 100..]
-                    .iter()
-                    .sum::<f32>() / 100.0
-            } else {
-                0.0
-            };
+                    let avg_quality = if metrics.episode_qualities.len() >= 100 {
+                        metrics.episode_qualities[metrics.episode_qualities.len() - 100..]
+                            .iter()
+                            .sum::<f32>() / 100.0
+                    } else {
+                        0.0
+                    };
 
-            let checkpoint = Checkpoint::new(
-                episode,
-                agent.get_step_count(),
-                avg_reward,
-                avg_quality,
-                metrics.best_avg_quality,
-                epsilon as f32,
-                checkpoint_path,
-            );
+                    let checkpoint = Checkpoint::new(
+                        episode,
+                        agent.get_step_count(),
+                        avg_reward,
+                        avg_quality,
+                        metrics.best_avg_quality,
+                        epsilon as f32,
+                        checkpoint_path.clone(),
+                    );
 
-            checkpoint_manager.save_checkpoint(&checkpoint)?;
-            site_memory.save_all()?;
-            info!("Saved checkpoint at episode {}", episode);
+                    match checkpoint_manager.save_checkpoint(&checkpoint) {
+                        Ok(_) => {
+                            // Verify the saved model file
+                            if checkpoint_path.exists() {
+                                let metadata = std::fs::metadata(&checkpoint_path)?;
+                                if metadata.len() > 0 {
+                                    site_memory.save_all()?;
+                                    info!("Checkpoint saved at episode {} ({} bytes)", episode, metadata.len());
+                                } else {
+                                    warn!("Checkpoint file is empty, may be corrupted");
+                                }
+                            } else {
+                                warn!("Checkpoint file disappeared after save");
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to save checkpoint metadata: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to save model checkpoint: {}", e);
+                }
+            }
         }
     }
 
     pb.finish_with_message("Training completed");
 
-    // Save final model
+    // Save final model with validation
     let final_path = config.models_dir.join("final_model.onnx");
     agent.save(&final_path)?;
+
+    // Verify final save
+    if final_path.exists() {
+        let metadata = std::fs::metadata(&final_path)?;
+        info!("Final model saved: {} bytes", metadata.len());
+    }
+
     site_memory.save_all()?;
 
     // Save final checkpoint
@@ -299,12 +367,19 @@ pub fn train_standard(
 }
 
 
-/// Training with improvements (curriculum learning, improved rewards, etc.)
+/// Training with improvements (curriculum learning, improved rewards, domain extraction, etc.)
 pub fn train_with_improvements(
     config: &Config,
     html_samples: Vec<(String, String)>,
 ) -> Result<(DQNAgent, TrainingMetrics)> {
-    info!("Starting improved training for {} episodes", config.num_episodes);
+    info!("Starting OPTIMIZED training for {} episodes", config.num_episodes);
+    info!("Performance settings:");
+    info!("  - Batch size: {}", config.batch_size);
+    info!("  - Train frequency: every {} steps", config.train_freq);
+    info!("  - Gradient updates per episode: {}", config.num_train_steps_per_episode);
+    info!("  - Min replay size: {}", config.min_replay_size);
+    info!("  - Metrics window: {}", config.metrics_window);
+    info!("  - Dataset size: {}", html_samples.len());
 
     // Initialize device and varbuilder
     let device = if config.use_cpu_for_tuning {
@@ -314,7 +389,12 @@ pub fn train_with_improvements(
     } else {
         Device::Cpu
     };
-    let vb = VarBuilder::zeros(DType::F32, &device);
+    let varmap = VarMap::new();
+    let vb = VarBuilder::from_varmap(&varmap, DType::F32, &device);
+
+    // step counters:
+    let mut global_step:usize = 0;
+    let mut total_training_steps:usize = 0;
 
     // Initialize components
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
@@ -343,16 +423,87 @@ pub fn train_with_improvements(
     let mut curriculum = CurriculumManager::new();
     let mut epsilon = config.epsilon_start;
 
-    // Progress bar
-    let pb = ProgressBar::new(config.num_episodes as u64);
+    // ADDED: Checkpoint manager for improved training
+    let checkpoint_dir = config.models_dir.join("checkpoints");
+    let checkpoint_manager = CheckpointManager::new(checkpoint_dir, 5)?;
+
+    // ADDED: Resume logic similar to train_standard
+    let start_episode = match checkpoint_manager.load_latest() {
+        Ok(Some(checkpoint)) => {
+            // Validate checkpoint compatibility
+            if checkpoint.episode >= config.num_episodes {
+                warn!(
+                    "Found checkpoint at episode {} but current run is only {} episodes. Starting fresh.",
+                    checkpoint.episode, config.num_episodes
+                );
+                0
+            } else if !checkpoint.model_path.exists() {
+                warn!(
+                    "Checkpoint references missing model file: {}. Starting fresh.",
+                    checkpoint.model_path.display()
+                );
+                0
+            } else {
+                // Try to load the model
+                info!("Found checkpoint at episode {}, attempting to load...", checkpoint.episode);
+
+                match DQNAgent::load_with_device(
+                    &checkpoint.model_path,
+                    config.state_dim,
+                    config.num_discrete_actions,
+                    config.num_continuous_params,
+                    &device,
+                ) {
+                    Ok(loaded_agent) => {
+                        agent = loaded_agent;
+                        epsilon = checkpoint.epsilon as f64;
+                        metrics.best_avg_quality = checkpoint.best_quality;
+
+                        // Try to load step counts from a separate file
+                        let step_counts_path = checkpoint.model_path.with_extension("steps.json");
+                        if step_counts_path.exists() {
+                            if let Ok(step_data) = std::fs::read_to_string(&step_counts_path) {
+                                if let Ok(step_counts) = serde_json::from_str::<(usize, usize)>(&step_data) {
+                                    global_step = step_counts.0;
+                                    total_training_steps = step_counts.1;
+                                    info!("Resumed step counts: global_step={}, total_training_steps={}",
+                                          global_step, total_training_steps);
+                                }
+                            }
+                        }
+
+                        info!("Successfully resumed from checkpoint at episode {}", checkpoint.episode);
+                        checkpoint.episode
+                    }
+                    Err(e) => {
+                        warn!("Failed to load checkpoint model: {}. Starting fresh.", e);
+                        warn!("Consider deleting checkpoint directory if corruption persists.");
+                        0
+                    }
+                }
+            }
+        }
+        Ok(None) => {
+            info!("No checkpoint found, starting fresh training");
+            0
+        }
+        Err(e) => {
+            warn!("Error loading checkpoint: {}. Starting fresh.", e);
+            0
+        }
+    };
+
+    // Progress bar - start from resume point
+    let pb = ProgressBar::new((config.num_episodes - start_episode) as u64);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg}")
             .unwrap()
-            .progress_chars("=>-"),
+            .progress_chars("█▓▒░"),
     );
 
-    for episode in 0..config.num_episodes {
+    for episode in start_episode..config.num_episodes {
+        let mut _episode_training_steps:usize = 0;
         // Update curriculum
         curriculum.update_threshold(episode);
 
@@ -367,19 +518,15 @@ pub fn train_with_improvements(
         }
 
         let idx = episode % appropriate_samples.len();
-        let (html, url) = appropriate_samples[idx];
+        let (html, file_path) = appropriate_samples[idx];
 
-        // FIXED: Extract domain from ground truth JSON
-        let domain = if let Ok(parsed_url) = url::Url::parse(url) {
-            if let Some(host) = parsed_url.host_str() {
-                host.to_string()
-            } else {
-                "unknown".to_string()
-            }
-        } else {
-            get_domain_from_ground_truth(Path::new(url))
-                .unwrap_or_else(|_| "unknown".to_string())
-        };
+        // Extract domain from ground truth JSON
+        let domain = extract_domain_from_url(file_path);
+
+        // Log domain extraction (first few episodes for verification)
+        if episode < 10 {
+            info!("Episode {}: File: {}, Domain: {}", episode, file_path, domain);
+        }
 
         let site_profile = site_memory.get_profile(&domain);
 
@@ -388,7 +535,7 @@ pub fn train_with_improvements(
         let baseline_score = baseline_result.quality_score;
 
         // Reset environment
-        let mut state = env.reset(html, url.clone(), Some(site_profile))?;
+        let mut state = env.reset(html, file_path.clone(), Some(site_profile))?;
 
         let mut episode_reward = 0.0;
         let mut done = false;
@@ -411,6 +558,8 @@ pub fn train_with_improvements(
             episode_reward += reward;
             done = is_done;
             step_info = info;
+            // Increment global step counter
+            global_step += 1;
 
             // Store experience
             let experience = crate::replay_buffer::Experience {
@@ -422,24 +571,76 @@ pub fn train_with_improvements(
             };
             replay_buffer.add(experience);
 
-            // Training step
-            if replay_buffer.len() > config.batch_size * 10 {
-                let loss = agent.train_step(&mut replay_buffer, config.batch_size)?;
-                metrics.episode_losses.push(loss);
+            // OPTIMIZED: More frequent training after warmup
+            if replay_buffer.len() >= config.min_replay_size &&
+                global_step % config.train_freq == 0 {
+                // ADDED: Robust error handling for training step
+                match agent.train_step(&mut replay_buffer, config.batch_size) {
+                    Ok(loss) => {
+                        // Check for NaN or infinite loss
+                        if loss.is_nan() || loss.is_infinite() {
+                            warn!("Invalid loss detected at episode {}, step {}: {}", episode, global_step, loss);
+                            warn!("Skipping this training step");
+                        } else {
+                            metrics.episode_losses.push(loss);
+                            _episode_training_steps += 1;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Training step failed at episode {}, step {}: {}", episode, global_step, e);
+                        warn!("Continuing training...");
+                        // Don't fail the entire run for one bad batch
+                    }
+                }
             }
 
             state = next_state;
         }
 
-        // Update site profile
+        // OPTIMIZED: Multiple gradient updates per episode
+        if replay_buffer.len() >= config.min_replay_size {
+            for update_idx in 0..config.num_train_steps_per_episode {
+                match agent.train_step(&mut replay_buffer, config.batch_size) {
+                    Ok(loss) => {
+                        if loss.is_nan() || loss.is_infinite() {
+                            warn!("Invalid loss in gradient update {} at episode {}", update_idx, episode);
+                            break; // Stop further updates this episode
+                        }
+                        metrics.episode_losses.push(loss);
+                        total_training_steps += 1;
+                    }
+                    Err(e) => {
+                        warn!("Gradient update {} failed at episode {}: {}", update_idx, episode, e);
+                        break; // Stop further updates this episode
+                    }
+                }
+            }
+        }
+
+        // Update site profile with correct domain
         let profile = site_memory.get_profile(&domain);
         let extraction_result = crate::site_profile::ExtractionResult {
             text: step_info.text.clone(),
             xpath: step_info.xpath.clone(),
             quality_score: step_info.quality_score,
             parameters: step_info.parameters.clone(),
+            title: None,
+            date: None,
         };
         profile.add_extraction(extraction_result);
+        // Save site profiles periodically
+        if episode % 100 == 0 && episode > 0 {
+            match site_memory.save_all() {
+                Ok(_) => {
+                    if episode % 500 == 0 {
+                        info!("Site profiles saved at episode {}", episode);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to save site profiles: {}", e);
+                }
+            }
+        }
 
         // Decay epsilon (exponential)
         let progress = (episode as f32 / 2000.0).min(1.0);
@@ -456,28 +657,99 @@ pub fn train_with_improvements(
         metrics.episode_qualities.push(step_info.quality_score);
 
         // Update progress bar
-        if episode % 10 == 0 {
-            let avg_reward = if metrics.episode_rewards.len() >= 100 {
-                metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
+        if episode % config.log_freq == 0 {
+            let window = config.metrics_window;
+            let avg_reward = if metrics.episode_rewards.len() >= window {
+                metrics.episode_rewards[metrics.episode_rewards.len() - window..]
                     .iter()
-                    .sum::<f32>() / 100.0
+                    .sum::<f32>() / window as f32
+            } else if !metrics.episode_rewards.is_empty() {
+                metrics.episode_rewards.iter().sum::<f32>() / metrics.episode_rewards.len() as f32
             } else {
-                episode_reward
+                0.0
+            };
+
+            let avg_quality = if metrics.episode_qualities.len() >= window {
+                metrics.episode_qualities[metrics.episode_qualities.len() - window..]
+                    .iter()
+                    .sum::<f32>() / window as f32
+            } else if !metrics.episode_qualities.is_empty() {
+                metrics.episode_qualities.iter().sum::<f32>() / metrics.episode_qualities.len() as f32
+            } else {
+                0.0
             };
 
             let curriculum_threshold = curriculum.get_threshold();
             pb.set_message(format!(
-                "Reward: {:.3}, Quality: {:.3}, Curriculum: {:.2}",
-                avg_reward, step_info.quality_score, curriculum_threshold
+                "R:{:.2} Q:{:.3} ε:{:.3} C:{:.2} Steps:{}",
+                avg_reward, avg_quality, epsilon, curriculum_threshold, total_training_steps
             ));
         }
         pb.inc(1);
 
-        // Save checkpoint
-        if episode % 1000 == 0 && episode > 0 {
+        // Save checkpoint every 500 episodes (more frequent for safety)
+        if episode % config.checkpoint_freq == 0 && episode > 0 {
             let checkpoint_path = config.models_dir.join(format!("checkpoint_ep{}.onnx", episode));
-            agent.save(&checkpoint_path)?;
-            site_memory.save_all()?;
+            match agent.save(&checkpoint_path) {
+                Ok(_) => {
+                    // Save step counts alongside model
+                    let step_counts_path = checkpoint_path.with_extension("steps.json");
+                    let step_counts = (global_step, total_training_steps);
+                    if let Ok(step_data) = serde_json::to_string(&step_counts) {
+                        let _ = std::fs::write(&step_counts_path, step_data);
+                    }
+
+                    // Create checkpoint metadata
+                    let avg_reward = if metrics.episode_rewards.len() >= 100 {
+                        metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
+                            .iter()
+                            .sum::<f32>() / 100.0
+                    } else {
+                        0.0
+                    };
+
+                    let avg_quality = if metrics.episode_qualities.len() >= 100 {
+                        metrics.episode_qualities[metrics.episode_qualities.len() - 100..]
+                            .iter()
+                            .sum::<f32>() / 100.0
+                    } else {
+                        0.0
+                    };
+
+                    let checkpoint = Checkpoint::new(
+                        episode,
+                        total_training_steps,  // Use total training steps as step count
+                        avg_reward,
+                        avg_quality,
+                        metrics.best_avg_quality,
+                        epsilon as f32,
+                        checkpoint_path.clone(),
+                    );
+
+                    match checkpoint_manager.save_checkpoint(&checkpoint) {
+                        Ok(_) => {
+                            site_memory.save_all()?;
+                            info!("Improved training checkpoint saved at episode {} (global_step={})",
+                                  episode, global_step);
+                        }
+                        Err(e) => {
+                            warn!("Failed to save checkpoint metadata: {}", e);
+                        }
+                    }
+                    // Verify file size
+                    if let Ok(metadata) = std::fs::metadata(&checkpoint_path) {
+                        let file_size = metadata.len();
+                        if file_size < 10_000 {
+                            warn!("Checkpoint file suspiciously small: {} bytes", file_size);
+                        } else {
+                            info!("Checkpoint saved at episode {} ({} bytes)", episode, file_size);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to save model checkpoint: {}", e);
+                }
+            }
             info!("Saved checkpoint at episode {}", episode);
         }
 
@@ -490,8 +762,19 @@ pub fn train_with_improvements(
             if avg_quality > metrics.best_avg_quality {
                 metrics.best_avg_quality = avg_quality;
                 let best_path = config.models_dir.join("best_model.onnx");
-                agent.save(&best_path)?;
-                info!("New best model saved with quality: {:.3}", avg_quality);
+                match agent.save(&best_path) {
+                    Ok(_) => {
+                        if let Ok(metadata) = std::fs::metadata(&best_path) {
+                            info!("New best model saved with quality: {:.3} ({} bytes)",
+                                  avg_quality, metadata.len());
+                        } else {
+                            info!("New best model saved with quality: {:.3}", avg_quality);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to save best model: {}", e);
+                    }
+                }
             }
         }
     }
@@ -503,7 +786,23 @@ pub fn train_with_improvements(
     agent.save(&final_path)?;
     site_memory.save_all()?;
 
-    info!("Training completed. Best avg quality: {:.3}", metrics.best_avg_quality);
+    // Save final checkpoint
+    let final_checkpoint = Checkpoint::new(
+        config.num_episodes,
+        total_training_steps,
+        metrics.episode_rewards.last().copied().unwrap_or(0.0),
+        metrics.episode_qualities.last().copied().unwrap_or(0.0),
+        metrics.best_avg_quality,
+        epsilon as f32,
+        final_path,
+    );
+    checkpoint_manager.save_checkpoint(&final_checkpoint)?;
+
+    info!("Training completed:");
+    info!("  - Total episodes: {}", config.num_episodes);
+    info!("  - Total training steps: {}", total_training_steps);
+    info!("  - Best avg quality: {:.3}", metrics.best_avg_quality);
+    info!("  - Final epsilon: {:.3}", epsilon);
 
     Ok((agent, metrics))
 }

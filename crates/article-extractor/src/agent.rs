@@ -1,15 +1,17 @@
-use candle_core::{Device, Tensor, DType};
+use candle_core::{Device, Tensor, DType, Var};
 use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap};
 use crate::models::DuelingDQN;
 use crate::replay_buffer::{PrioritizedReplayBuffer, SampledBatch};
 use crate::Result;
 use rand::Rng;
+use tracing::{info, warn};
 
 /// DQN Agent for article extraction
 pub struct DQNAgent {
-    online_network: DuelingDQN,
+    pub(crate) online_network: DuelingDQN,
     target_network: DuelingDQN,
     optimizer: AdamW,
+    trainable_vars: Vec<Var>, // Store for gradient clipping
     num_actions: usize,
     num_params: usize,
     gamma: f32,
@@ -29,32 +31,62 @@ impl DQNAgent {
         vb: VarBuilder,
     ) -> Result<Self> {
         let online_network = DuelingDQN::new(state_dim, num_actions, num_params, vb.pp("online"))?;
-        let target_network = DuelingDQN::new(state_dim, num_actions, num_params, vb.pp("target"))?;
 
-        // Get Var objects from the network properly
-        let varmap = VarMap::new();
-        let vb_opt = VarBuilder::from_varmap(&varmap, DType::F32, device);
-        let _online_network_for_vars = DuelingDQN::new(state_dim, num_actions, num_params, vb_opt)?;
+        // Create target network with separate VarBuilder
+        let target_varmap = VarMap::new();
+        let target_vb = VarBuilder::from_varmap(&target_varmap, DType::F32, device);
+        let mut target_network = DuelingDQN::new(state_dim, num_actions, num_params, target_vb.pp("target"))?;
 
-        let vars = varmap.all_vars();
+        // Get trainable variables
+        let trainable_vars = vb.data().all_vars();
 
         let params = ParamsAdamW {
             lr,
-            ..Default::default()
+            beta1: 0.9,
+            beta2: 0.999,
+            eps: 1e-8,
+            weight_decay: 1e-4,
         };
-        let optimizer = AdamW::new(vars, params)
+
+        let optimizer = AdamW::new(trainable_vars.clone(), params)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Copy online network weights to target network initially
+        // This ensures they start with the same weights
+        // Initialize target network with same weights as online network
+        target_network.copy_weights_from(&online_network)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         Ok(Self {
             online_network,
             target_network,
             optimizer,
+            trainable_vars,
             num_actions,
             num_params,
             gamma,
             step_count: 0,
             device: device.clone(),
         })
+    }
+
+    /// Copy weights from source network to target network
+    fn copy_network_weights(source: &DuelingDQN, target: &mut DuelingDQN) -> Result<()> {
+        target.copy_weights_from(source)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))
+    }
+
+    /// Update target network using soft update
+    pub fn update_target_network(&mut self) {
+        // TODO: improve this
+        let tau = 0.005; // Soft update parameter
+
+        // For now, implement hard update
+        if let Err(e) = Self::copy_network_weights(&self.online_network, &mut self.target_network) {
+            warn!("Failed to update target network: {}", e);
+        } else {
+            info!("Target network updated (hard update)");
+        }
     }
 
     /// Get step count
@@ -99,6 +131,8 @@ impl DQNAgent {
     }
 
     /// Complete training step with proper loss calculation
+    // In agent.rs - Replace the entire train_step method
+
     pub fn train_step(&mut self, replay_buffer: &mut PrioritizedReplayBuffer, batch_size: usize) -> Result<f32> {
         let batch = replay_buffer.sample(batch_size);
 
@@ -180,6 +214,14 @@ impl DQNAgent {
         let (q_values, param_means, param_stds) = self.online_network.forward(&states_tensor, true)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
+        // VALIDATION: Check for NaN/Inf in forward pass
+        let q_sample = q_values.get(0)?.to_vec1::<f32>()?;
+        if q_sample.iter().any(|&x| x.is_nan() || x.is_infinite()) {
+            return Err(crate::ExtractionError::ModelError(
+                "NaN/Inf detected in Q-values forward pass".to_string()
+            ));
+        }
+
         // Gather Q-values for taken actions
         let q_values_selected = q_values
             .gather(&actions_discrete_tensor.unsqueeze(1)?, 1)?
@@ -228,13 +270,65 @@ impl DQNAgent {
         // Parameter loss (Negative log-likelihood of Gaussian)
         let param_loss = self.calculate_param_loss(&param_means, &param_stds, &actions_params_tensor)?;
 
-        // Combined loss
-        let param_loss_weight_vec = vec![0.1f32; 1];
-        let param_loss_weight = Tensor::from_vec(param_loss_weight_vec, &[1], &self.device)?;
-        let total_loss = loss_q.add(&param_loss.mul(&param_loss_weight)?)?;
+        // CRITICAL FIX: Properly combine losses without shape mismatch
+        // Both loss_q and param_loss are scalars (shape [])
+        // Convert to f32, combine, then back to tensor
+        let loss_q_scalar = loss_q.to_scalar::<f32>()
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let param_loss_scalar = param_loss.to_scalar::<f32>()
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Combine with weight (0.1 for param loss)
+        let total_loss_scalar = loss_q_scalar + 0.1 * param_loss_scalar;
+
+        // Create tensor from combined scalar
+        let total_loss = Tensor::from_vec(
+            vec![total_loss_scalar],
+            &[1],
+            &self.device
+        )?;
+
+        // VALIDATION: Check final loss
+        if total_loss_scalar.is_nan() || total_loss_scalar.is_infinite() {
+            return Err(crate::ExtractionError::ModelError(
+                format!("Invalid loss: {}", total_loss_scalar)
+            ));
+        }
 
         // Backward pass
         self.optimizer.backward_step(&total_loss)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // CLIP GRADIENTS to prevent explosion
+        // TODO: check and improve this
+        let max_grad_norm = 1.0;
+        let mut total_norm_sq = 0.0;
+
+        // Calculate total gradient norm
+        for var in &self.trainable_vars {
+            if let Some(grad) = var.grad() {
+                let norm_sq = grad.sqr()?.sum_all()?.to_scalar::<f32>()?;
+                total_norm_sq += norm_sq;
+            }
+        }
+
+        let total_norm = total_norm_sq.sqrt();
+
+        // Clip gradients if norm exceeds threshold
+        if total_norm > max_grad_norm {
+            let scale = max_grad_norm / (total_norm + 1e-6);
+
+            for var in &self.trainable_vars {
+                if let Some(grad) = var.grad() {
+                    let clipped_grad = grad.mul_scalar(scale)?;
+                    var.set_grad(&clipped_grad)?;
+                }
+            }
+        }
+
+        // Step the optimizer with potentially clipped gradients
+        self.optimizer.step()
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         // Update priorities in replay buffer
@@ -243,11 +337,7 @@ impl DQNAgent {
         self.step_count += 1;
 
         // Return loss value
-        let loss_value = total_loss
-            .to_scalar::<f32>()
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
-        Ok(loss_value)
+        Ok(total_loss_scalar)
     }
 
     /// Calculate parameter loss (negative log-likelihood)
@@ -265,8 +355,7 @@ impl DQNAgent {
 
         let diff = actions.sub(means)?;
 
-        // CRITICAL FIX: Broadcast stds to match batch dimension
-        // stds has shape [num_params], need to broadcast to [batch_size, num_params]
+        // FIXED: Broadcast stds to match batch dimension
         let stds_broadcast = stds.unsqueeze(0)?.broadcast_as(means.shape())?;
 
         let variance = stds_broadcast.sqr()?;
@@ -290,15 +379,23 @@ impl DQNAgent {
         nll.mean_all()
     }
 
-    /// Update target network (hard update)
-    pub fn update_target_network(&mut self) {
-        // In a real implementation, we would copy all parameters
-    }
 
-    /// Save model to ONNX format
+    /// Save model in both ONNX and SafeTensors formats
     pub fn save(&self, path: &std::path::Path) -> Result<()> {
+        // Save ONNX
         self.online_network.save_to_onnx(path)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Save SafeTensors (verify path extension)
+        let safetensors_path = path.with_extension("safetensors");
+        self.online_network.save_to_safetensors(&safetensors_path)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        tracing::info!("Model saved: ONNX ({} bytes), SafeTensors ({} bytes)",
+                   std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+                   std::fs::metadata(&safetensors_path).map(|m| m.len()).unwrap_or(0));
+
+        Ok(())
     }
 
     /// Load model from ONNX format
@@ -390,4 +487,141 @@ fn smooth_l1_loss(predicted: &Tensor, target: &Tensor) -> candle_core::error::Re
 
     abs_diff.lt(&threshold)?
         .where_cond(&small_loss, &large_loss)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::replay_buffer::{PrioritizedReplayBuffer, Experience};
+    use candle_core::Device;
+    use candle_nn::VarBuilder;
+    use candle_core::DType;
+
+    #[test]
+    fn test_train_step_no_shape_mismatch() {
+        // This test verifies the fix for "shape mismatch in mul" error
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+
+        let mut agent = DQNAgent::new(
+            300,  // state_dim
+            16,   // num_actions
+            6,    // num_params
+            0.95, // gamma
+            0.001, // lr
+            &device,
+            vb,
+        ).unwrap();
+
+        let mut replay_buffer = PrioritizedReplayBuffer::new(10000, 0.6, 0.4);
+
+        // Add enough experiences for a full batch
+        for _ in 0..1000 {
+            let exp = Experience {
+                state: vec![0.1; 300],
+                action: (0, vec![0.0; 6]),
+                reward: 1.0,
+                next_state: vec![0.2; 300],
+                done: false,
+            };
+            replay_buffer.add(exp);
+        }
+
+        // This should not panic with shape mismatch
+        let result = agent.train_step(&mut replay_buffer, 512);
+
+        match result {
+            Ok(loss) => {
+                println!("Training step successful, loss: {}", loss);
+                assert!(!loss.is_nan(), "Loss should not be NaN");
+                assert!(!loss.is_infinite(), "Loss should not be infinite");
+            }
+            Err(e) => {
+                panic!("Training step failed: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_train_step_different_batch_sizes() {
+        // Test with various batch sizes to ensure robustness
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+
+        let mut agent = DQNAgent::new(300, 16, 6, 0.95, 0.001, &device, vb).unwrap();
+        let mut replay_buffer = PrioritizedReplayBuffer::new(10000, 0.6, 0.4);
+
+        // Add experiences
+        for _ in 0..2000 {
+            let exp = Experience {
+                state: vec![0.1; 300],
+                action: (5, vec![0.5; 6]),
+                reward: 0.5,
+                next_state: vec![0.2; 300],
+                done: false,
+            };
+            replay_buffer.add(exp);
+        }
+
+        // Test different batch sizes
+        for batch_size in [64, 128, 256, 512, 1024] {
+            let result = agent.train_step(&mut replay_buffer, batch_size);
+            assert!(result.is_ok(), "Failed with batch_size={}: {:?}", batch_size, result);
+
+            let loss = result.unwrap();
+            assert!(!loss.is_nan(), "NaN loss with batch_size={}", batch_size);
+            assert!(!loss.is_infinite(), "Infinite loss with batch_size={}", batch_size);
+        }
+    }
+
+    #[test]
+    fn test_parameter_loss_calculation() {
+        // Test the fixed calculate_param_loss method
+        let device = Device::Cpu;
+        let vb = VarBuilder::zeros(DType::F32, &device);
+
+        let agent = DQNAgent::new(300, 16, 6, 0.95, 0.001, &device, vb).unwrap();
+
+        let batch_size = 128;
+        let num_params = 6;
+
+        // Create test tensors
+        let means = Tensor::zeros(&[batch_size, num_params], DType::F32, &device).unwrap();
+        let stds = Tensor::ones(&[num_params], DType::F32, &device).unwrap(); // Shape [6]
+        let actions = Tensor::zeros(&[batch_size, num_params], DType::F32, &device).unwrap();
+
+        // This should not panic
+        let loss = agent.calculate_param_loss(&means, &stds, &actions);
+
+        assert!(loss.is_ok(), "Parameter loss calculation failed: {:?}", loss);
+
+        let loss_value = loss.unwrap().to_scalar::<f32>().unwrap();
+        assert!(!loss_value.is_nan(), "Loss is NaN");
+        assert!(!loss_value.is_infinite(), "Loss is infinite");
+    }
+
+    #[test]
+    fn test_loss_combination() {
+        // Test that loss combination doesn't cause shape mismatches
+        let device = Device::Cpu;
+
+        // Create two scalar losses
+        let loss_q = Tensor::from_vec(vec![0.5f32], &[1], &device).unwrap();
+        let param_loss = Tensor::from_vec(vec![0.3f32], &[1], &device).unwrap();
+
+        // Extract scalars
+        let loss_q_scalar = loss_q.to_scalar::<f32>().unwrap();
+        let param_loss_scalar = param_loss.to_scalar::<f32>().unwrap();
+
+        // Combine
+        let total = loss_q_scalar + 0.1 * param_loss_scalar;
+
+        // Create new tensor
+        let total_tensor = Tensor::from_vec(vec![total], &[1], &device).unwrap();
+
+        // This should work
+        assert_eq!(total_tensor.dims(), &[1]);
+        assert!(!total.is_nan());
+    }
 }

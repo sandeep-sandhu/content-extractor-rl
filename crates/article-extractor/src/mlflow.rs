@@ -159,7 +159,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref client), Some(ref runtime), Some(ref run_id)) =
+            if let (Some(ref _client), Some(ref _runtime), Some(ref _run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 for (key, value) in params {
@@ -181,7 +181,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref client), Some(ref runtime), Some(ref run_id)) =
+            if let (Some(ref _client), Some(ref _runtime), Some(ref _run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 let step = step.unwrap_or(0);
@@ -256,7 +256,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref client), Some(ref runtime), Some(ref run_id)) =
+            if let (Some(ref _client), Some(ref _runtime), Some(ref run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 // Log final status as a param

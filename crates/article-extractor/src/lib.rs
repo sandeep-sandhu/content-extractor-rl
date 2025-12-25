@@ -37,6 +37,9 @@ pub use plotting::{TrainingPlotter, PlotConfig};
 pub use device::{get_device, cuda_is_available, get_device_info, print_device_info};
 
 pub mod checkpoint;
+pub mod cli_utils;
+
+pub use cli_utils::*;
 pub use checkpoint::{Checkpoint, CheckpointManager};
 
 

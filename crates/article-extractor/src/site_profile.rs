@@ -130,6 +130,8 @@ pub struct ExtractionResult {
     pub xpath: String,
     pub quality_score: f32,
     pub parameters: HashMap<String, f64>,
+    pub title: Option<String>,
+    pub date: Option<String>,
 }
 
 /// Site profile memory manager
@@ -222,6 +224,8 @@ mod tests {
             xpath: "//article[1]".to_string(),
             quality_score: 0.8,
             parameters: HashMap::new(),
+            title: Some("test title".to_string()),
+            date: None,
         };
 
         profile.add_extraction(result);

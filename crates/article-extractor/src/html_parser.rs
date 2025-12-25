@@ -5,6 +5,7 @@ use crate::Result;
 pub struct HtmlParser;
 
 impl HtmlParser {
+
     /// Parse HTML string into document
     pub fn parse(html: &str) -> Result<Html> {
         Ok(Html::parse_document(html))
@@ -36,12 +37,33 @@ impl HtmlParser {
         format!("/{}", path.join("/"))
     }
 
-    /// Clean HTML by removing script, style, etc.
+
+    /// Clean HTML by removing script, style, comments, etc.
     pub fn clean_html(html: &str) -> Result<Html> {
         let document = Html::parse_document(html);
 
         // Create cleaned HTML string (simplified - proper cleaning would modify DOM)
         let mut cleaned = html.to_string();
+
+        // Remove script tags and their content (case-insensitive, multiline)
+        let script_re = regex::Regex::new(r"(?is)<script\b[^>]*>.*?</script>").unwrap();
+        cleaned = script_re.replace_all(&cleaned, "").to_string();
+
+        // Remove style tags and their content
+        let style_re = regex::Regex::new(r"(?is)<style\b[^>]*>.*?</style>").unwrap();
+        cleaned = style_re.replace_all(&cleaned, "").to_string();
+
+        // Remove HTML comments
+        let comment_re = regex::Regex::new(r"(?s)<!--.*?-->").unwrap();
+        cleaned = comment_re.replace_all(&cleaned, "").to_string();
+
+        // Remove inline JavaScript event handlers
+        let event_re = regex::Regex::new(r#"\son\w+\s*=\s*["'][^"']*["']"#).unwrap();
+        cleaned = event_re.replace_all(&cleaned, "").to_string();
+
+        // Remove JavaScript: protocol links
+        let js_protocol_re = regex::Regex::new(r#"javascript:[^"'\s>]*"#).unwrap();
+        cleaned = js_protocol_re.replace_all(&cleaned, "").to_string();
 
         // Remove script tags
         let script_selector = Selector::parse("script").unwrap();
@@ -63,7 +85,7 @@ impl HtmlParser {
     }
 
     /// Get candidate article nodes from document
-    pub fn get_candidate_nodes(document: &Html, top_k: usize) -> Vec<ElementRef> {
+    pub fn get_candidate_nodes(document: &Html, top_k: usize) -> Vec<ElementRef<'_>> {
         let mut candidates = Vec::new();
 
         // Try article tags first

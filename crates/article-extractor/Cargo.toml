@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 candle-core.workspace = true
 candle-nn.workspace = true
+safetensors.workspace = true
 ndarray.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -26,19 +27,21 @@ tracing.workspace = true
 plotters.workspace = true
 tract-onnx = { version = "0.22.0", optional = true }
 tract-core = { version = "0.22.0", optional = true }
+lazy_static.workspace = true
+bzip2.workspace = true
+rand_distr.workspace = true
 
 # Additional dependencies
 url = "2.5.7"
-lazy_static = "1.5.0"
 indicatif = "0.18.3"
 selectors = "0.33.0"
-bzip2.workspace = true
-rand_distr.workspace = true
+tempfile = "3.24.0"
 
 # Optional MLflow support
 trs-mlflow = { version = "0.6.7", optional = true }
 tokio = { version = "1.48.0", features = ["full"], optional = true }
-futures = { version = "0.3.31", optional = true }  # Made optional
+futures = { version = "0.3.31", optional = true }
+walkdir = "2.5.0"  # Made optional
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
@@ -61,3 +64,7 @@ harness = false
 [[bench]]
 name = "memory_benchmark"
 harness = false
+
+[lib]
+name = "article_extractor"
+path = "src/lib.rs"
