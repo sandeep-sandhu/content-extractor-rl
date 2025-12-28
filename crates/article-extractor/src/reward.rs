@@ -1,3 +1,7 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/reward.rs
+// ============================================================================
+
 use crate::text_utils::TextUtils;
 use std::collections::HashSet;
 

@@ -1,11 +1,17 @@
+// ============================================================================
+// FILE: crates/article-extractor-py/src/lib.rs
+// ============================================================================
+
+
 use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{PyDict, PyModule};
 use article_extractor::{
-    Config, BaselineExtractor, DQNAgent, SiteProfileMemory,
+    Config, BaselineExtractor, SiteProfileMemory,
     ExtractedArticle, BatchExtractionResult, cuda_is_available,
 };
 use std::path::PathBuf;
+use article_extractor::agents::dqn_agent::DQNAgent;
 
 /// Python wrapper for the article extractor
 #[pyclass]

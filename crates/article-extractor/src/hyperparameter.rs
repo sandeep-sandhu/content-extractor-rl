@@ -1,3 +1,7 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/hyperparameter.rs
+// ============================================================================
+
 use crate::{Config, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

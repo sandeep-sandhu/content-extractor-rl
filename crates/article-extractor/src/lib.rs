@@ -3,20 +3,36 @@
 //! This library provides functionality for extracting article content from HTML
 //! using reinforcement learning with fallback to heuristic-based extraction.
 
+// ============================================================================
+// FILE: crates/article-extractor/src/lib.rs
+// ============================================================================
+
 pub mod config;
 pub mod text_utils;
 pub mod html_parser;
 pub mod site_profile;
 pub mod baseline_extractor;
+pub mod evaluation;
+
+pub use evaluation::{
+    GroundTruthData, GroundTruthEvaluator, EvaluationMetrics,
+    algorithm_comparison::{AlgorithmComparator, ComparisonReport},
+};
 pub mod models;
-pub mod agent;
+pub use models::ModelMetadata;
+
 pub mod environment;
 pub mod replay_buffer;
 pub mod reward;
 pub mod curriculum;
+
+pub mod agents;
+pub use agents::{AgentFactory, AlgorithmType, RLAgent};
+pub use cli_utils::*;
+pub use checkpoint::{Checkpoint, CheckpointManager};
+
 pub mod training;
 pub mod hyperparameter_tuner;
-pub mod evaluation;
 pub mod plotting;
 pub mod device;
 
@@ -28,19 +44,16 @@ pub mod mlflow;
 pub use config::Config;
 pub use site_profile::{SiteProfile, SiteProfileMemory};
 pub use baseline_extractor::BaselineExtractor;
-pub use agent::DQNAgent;
 pub use environment::ArticleExtractionEnvironment;
 pub use training::{train_standard, train_with_improvements, TrainingMetrics};
 pub use hyperparameter_tuner::{TPEOptimizer, Hyperparameters, HyperparameterSpace, TrialResult};
-pub use evaluation::{GroundTruthData, GroundTruthEvaluator, EvaluationMetrics};
+
 pub use plotting::{TrainingPlotter, PlotConfig};
 pub use device::{get_device, cuda_is_available, get_device_info, print_device_info};
 
 pub mod checkpoint;
 pub mod cli_utils;
 
-pub use cli_utils::*;
-pub use checkpoint::{Checkpoint, CheckpointManager};
 
 
 #[cfg(feature = "mlflow-rs")]

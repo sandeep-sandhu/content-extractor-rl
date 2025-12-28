@@ -1,5 +1,8 @@
 //! High-level command interface for CLI
 //! This module contains the main logic for each CLI command
+// ============================================================================
+// FILE: crates/article-extractor/src/cli_utils.rs
+// ============================================================================
 
 use crate::*;
 use std::path::{Path, PathBuf};
@@ -7,6 +10,7 @@ use bzip2::read::BzDecoder;
 use std::io::Read;
 use indicatif::{ProgressBar, ProgressStyle};
 use url::Url;
+use crate::agents::dqn_agent::DQNAgent;
 
 /// Extract article from single HTML file
 pub fn extract_single(

@@ -1,3 +1,7 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/baseline_extractor.rs
+// ============================================================================
+
 use scraper::{Html, Selector, ElementRef};
 use crate::text_utils::TextUtils;
 use crate::html_parser::HtmlParser;

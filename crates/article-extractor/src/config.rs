@@ -1,7 +1,12 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/config.rs
+// ============================================================================
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use crate::agents::AlgorithmType;
 
 /// Configuration for the article extractor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +17,10 @@ pub struct Config {
     pub output_dir: PathBuf,
     pub models_dir: PathBuf,
     pub use_cpu_for_tuning: bool,
+
+    // Algorithm selection
+    #[serde(default)]
+    pub algorithm: AlgorithmType,
 
     // Training hyperparameters
     pub num_episodes: usize,
@@ -29,24 +38,31 @@ pub struct Config {
     pub priority_alpha: f64,
     pub priority_beta: f64,
 
-    // NEW: Performance tuning
-    pub min_replay_size: usize,          // Start training after this many experiences
-    pub train_freq: usize,                // Train every N steps
-    pub num_train_steps_per_episode: usize, // Multiple gradient updates per episode
-    pub max_html_samples: usize,          // Limit dataset size
-    pub sample_batch_load_size: usize,    // Load HTML in batches
-    pub prefetch_samples: bool,           // Async sample loading
+    // Performance tuning
+    pub min_replay_size: usize,
+    pub train_freq: usize,
+    pub num_train_steps_per_episode: usize,
+    pub max_html_samples: usize,
+    pub sample_batch_load_size: usize,
+    pub prefetch_samples: bool,
 
-    // NEW: Metrics
-    pub metrics_window: usize,            // Window for moving averages
-    pub checkpoint_freq: usize,           // Save every N episodes
-    pub log_freq: usize,                  // Progress bar update frequency
+    // Metrics
+    pub metrics_window: usize,
+    pub checkpoint_freq: usize,
+    pub log_freq: usize,
 
     // State/Action space
     pub state_dim: usize,
     pub num_discrete_actions: usize,
     pub num_continuous_params: usize,
     pub num_candidate_nodes: usize,
+
+    // PPO-specific hyperparameters
+    pub ppo_clip_epsilon: f32,
+    pub ppo_gae_lambda: f32,
+    pub ppo_value_loss_coef: f32,
+    pub ppo_entropy_coef: f32,
+    pub ppo_epochs: usize,
 
     // Stopwords
     pub stopwords: HashSet<String>,
@@ -72,10 +88,13 @@ impl Default for Config {
                 .unwrap_or_else(|| PathBuf::from("./models")),
             use_cpu_for_tuning: false,
 
+            // Default algorithm
+            algorithm: AlgorithmType::DuelingDQN,
+
             num_episodes: 10000,
 
-            // OPTIMIZED: Smaller batch size for better GPU utilization
-            batch_size: 512,  // Down from 8192 - better for gradient updates
+            // Smaller batch size for better GPU utilization and is better for gradient updates
+            batch_size: 512,
 
             learning_rate: 3e-4,
             gamma: 0.95,
@@ -110,12 +129,47 @@ impl Default for Config {
             num_continuous_params: 6,
             num_candidate_nodes: 10,
 
+            // NEW: PPO defaults
+            ppo_clip_epsilon: 0.2,
+            ppo_gae_lambda: 0.95,
+            ppo_value_loss_coef: 0.5,
+            ppo_entropy_coef: 0.01,
+            ppo_epochs: 4,
+
             stopwords: Self::default_stopwords(),
         }
     }
 }
 
 impl Config {
+    /// Create config with specific algorithm
+    pub fn with_algorithm(algorithm: AlgorithmType) -> Self {
+        let mut config = Self::default();
+        config.algorithm = algorithm;
+        config
+    }
+
+    /// PPO recommended configuration
+    pub fn ppo_recommended() -> Self {
+        let mut config = Self::with_algorithm(AlgorithmType::PPO);
+        config.batch_size = 2048;
+        config.learning_rate = 3e-4;
+        config.num_train_steps_per_episode = 8;
+        config.ppo_epochs = 10;
+        config.ppo_clip_epsilon = 0.2;
+        config.ppo_gae_lambda = 0.95;
+        config
+    }
+
+    /// DQN optimized configuration
+    pub fn dqn_optimized() -> Self {
+        let mut config = Self::with_algorithm(AlgorithmType::DuelingDQN);
+        config.batch_size = 2048;
+        config.learning_rate = 0.001;
+        config.target_update_freq = 500;
+        config
+    }
+
     /// Create high-performance GPU config
     pub fn gpu_optimized() -> Self {
         let mut config = Self::default();

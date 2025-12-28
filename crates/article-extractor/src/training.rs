@@ -1,5 +1,10 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/training.rs
+// ============================================================================
+
 use crate::{
-    Config, DQNAgent, ArticleExtractionEnvironment, BaselineExtractor, ExtractionError,
+    Config, ArticleExtractionEnvironment, BaselineExtractor, ExtractionError,
+    agents::{AgentFactory, RLAgent},
 };
 
 use crate::{
@@ -15,8 +20,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 use tracing::{info, warn};
 use crate::{Checkpoint, CheckpointManager};
-use candle_core::DType;
-use candle_nn::{VarBuilder, VarMap};
+use candle_nn::{VarMap};
 use candle_core::Device;
 
 
@@ -73,7 +77,7 @@ pub struct TrainingMetrics {
 pub fn train_standard(
     config: &Config,
     html_samples: Vec<(String, String)>,
-) -> Result<(DQNAgent, TrainingMetrics)> {
+) -> Result<(Box<dyn RLAgent>, TrainingMetrics)> {
     info!("Starting standard training for {} episodes", config.num_episodes);
 
     let device = if config.use_cpu_for_tuning {
@@ -95,23 +99,23 @@ pub fn train_standard(
         config.priority_beta,
     );
 
-    let mut agent = DQNAgent::new(
+    let mut agent = AgentFactory::create(
+        config.algorithm,
         config.state_dim,
         config.num_discrete_actions,
         config.num_continuous_params,
         config.gamma as f32,
         config.learning_rate,
         &device,
-        varmap, // Pass the VarMap, not VarBuilder
     )?;
 
-    // VERIFY initialization
-    if !agent.online_network.verify_initialization()? {
-        return Err(ExtractionError::ModelError(
-            "Model initialization failed - weights are all zeros!".to_string()
-        ));
-    }
-    info!("Model initialized successfully with non-zero weights");
+    // TODO: correctly implement VERIFY initialization
+    // if !agent.online_network.verify_initialization()? {
+    //     return Err(ExtractionError::ModelError(
+    //         "Model initialization failed - weights are all zeros!".to_string()
+    //     ));
+    // }
+    // info!("Model initialized successfully with non-zero weights");
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor, config.clone());
     let mut metrics = TrainingMetrics::default();
@@ -141,7 +145,7 @@ pub fn train_standard(
                 // Try to load the model
                 info!("Found checkpoint at episode {}, attempting to load...", checkpoint.episode);
 
-                match DQNAgent::load_with_device(
+                match AgentFactory::load(
                     &checkpoint.model_path,
                     config.state_dim,
                     config.num_discrete_actions,
@@ -336,14 +340,24 @@ pub fn train_standard(
 
     pb.finish_with_message("Training completed");
 
-    // Save final model with validation
+    // Save final model with validation and metadata
     let final_path = config.models_dir.join("final_model.onnx");
-    agent.save(&final_path)?;
+    let mut hyperparams = std::collections::HashMap::new();
+    hyperparams.insert("learning_rate".to_string(), config.learning_rate);
+    hyperparams.insert("batch_size".to_string(), config.batch_size as f64);
+    hyperparams.insert("gamma".to_string(), config.gamma);
+    hyperparams.insert("epsilon_decay".to_string(), config.epsilon_decay);
+    hyperparams.insert("target_update_freq".to_string(), config.target_update_freq as f64);
+    agent.save_with_metadata(&final_path, config.num_episodes, hyperparams)?;
 
     // Verify final save
     if final_path.exists() {
         let metadata = std::fs::metadata(&final_path)?;
         info!("Final model saved: {} bytes", metadata.len());
+    }
+    // Display metadata
+    if let Ok(model_meta) = crate::models::ModelMetadata::load_metadata(&final_path) {
+        model_meta.display();
     }
 
     site_memory.save_all()?;
@@ -370,7 +384,7 @@ pub fn train_standard(
 pub fn train_with_improvements(
     config: &Config,
     html_samples: Vec<(String, String)>,
-) -> Result<(DQNAgent, TrainingMetrics)> {
+) -> Result<(Box<dyn RLAgent>, TrainingMetrics)> {
     info!("Starting OPTIMIZED training for {} episodes", config.num_episodes);
     info!("Performance settings:");
     info!("  - Batch size: {}", config.batch_size);
@@ -388,7 +402,6 @@ pub fn train_with_improvements(
     } else {
         Device::Cpu
     };
-    let varmap = VarMap::new();
 
     // step counters:
     let mut global_step:usize = 0;
@@ -403,14 +416,15 @@ pub fn train_with_improvements(
         config.priority_beta,
     );
 
-    let mut agent = DQNAgent::new(
+    // varmap is created internally by AgentFactory
+    let mut agent = AgentFactory::create(
+        config.algorithm,
         config.state_dim,
         config.num_discrete_actions,
         config.num_continuous_params,
         config.gamma as f32,
         config.learning_rate,
         &device,
-        varmap,
     )?;
 
     let mut env = ArticleExtractionEnvironment::new(baseline_extractor.clone(), config.clone());
@@ -445,7 +459,7 @@ pub fn train_with_improvements(
                 // Try to load the model
                 info!("Found checkpoint at episode {}, attempting to load...", checkpoint.episode);
 
-                match DQNAgent::load_with_device(
+                match AgentFactory::load(
                     &checkpoint.model_path,
                     config.state_dim,
                     config.num_discrete_actions,
@@ -779,9 +793,26 @@ pub fn train_with_improvements(
 
     pb.finish_with_message("Improved training completed");
 
-    // Final save
+    // Save final model with validation and metadata
     let final_path = config.models_dir.join("final_model.onnx");
-    agent.save(&final_path)?;
+    let mut hyperparams = std::collections::HashMap::new();
+    hyperparams.insert("learning_rate".to_string(), config.learning_rate);
+    hyperparams.insert("batch_size".to_string(), config.batch_size as f64);
+    hyperparams.insert("gamma".to_string(), config.gamma);
+    hyperparams.insert("epsilon_decay".to_string(), config.epsilon_decay);
+    hyperparams.insert("target_update_freq".to_string(), config.target_update_freq as f64);
+    agent.save_with_metadata(&final_path, config.num_episodes, hyperparams)?;
+
+    // Verify final save
+    if final_path.exists() {
+        let metadata = std::fs::metadata(&final_path)?;
+        info!("Final model saved: {} bytes", metadata.len());
+    }
+    // Display metadata
+    if let Ok(model_meta) = crate::models::ModelMetadata::load_metadata(&final_path) {
+        model_meta.display();
+    }
+
     site_memory.save_all()?;
 
     // Save final checkpoint

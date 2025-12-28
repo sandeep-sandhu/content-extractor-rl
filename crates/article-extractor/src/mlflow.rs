@@ -1,4 +1,7 @@
 //! MLflow experiment tracking integration using trs_mlflow crate
+// ============================================================================
+// FILE: crates/article-extractor/src/mlflow.rs
+// ============================================================================
 
 #[cfg(feature = "mlflow-rs")]
 use trs_mlflow::{run::CreateRun, Client};

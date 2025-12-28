@@ -1,4 +1,7 @@
 //! Device selection for CPU/CUDA
+// ============================================================================
+// FILE: crates/article-extractor/src/device.rs
+// ============================================================================
 
 use candle_core::Device;
 use tracing::{info, warn};

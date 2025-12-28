@@ -1,5 +1,10 @@
 
-/// Curriculum learning manager
+//! Curriculum learning manager
+
+// ============================================================================
+// FILE: crates/article-extractor/src/curriculum.rs
+// ============================================================================
+
 pub struct CurriculumManager {
     current_threshold: f32,
     max_threshold: f32,

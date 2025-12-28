@@ -1,7 +1,13 @@
+//! HTML parsing and DOM manipulation utilities
+
+// ============================================================================
+// FILE: crates/article-extractor/src/html_parser.rs
+// ============================================================================
+
 use scraper::{Html, Selector, ElementRef, Element};
 use crate::Result;
 
-/// HTML parsing and DOM manipulation utilities
+
 pub struct HtmlParser;
 
 impl HtmlParser {

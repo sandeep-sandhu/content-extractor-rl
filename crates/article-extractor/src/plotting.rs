@@ -1,4 +1,7 @@
 //! Training visualization and plotting using plotters library
+// ============================================================================
+// FILE: crates/article-extractor/src/plotting.rs
+// ============================================================================
 
 use crate::{Result, training::TrainingMetrics};
 use plotters::prelude::*;

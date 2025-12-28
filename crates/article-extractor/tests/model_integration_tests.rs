@@ -1,12 +1,17 @@
-// tests/model_integration_tests.rs
-// Comprehensive integration tests for model saving and loading
+//! Comprehensive integration tests for model saving and loading
+// ============================================================================
+// FILE: crates/article-extractor/tests/model_integration_tests.rs
+// ============================================================================
+use article_extractor::agents::dqn_agent::DQNAgent;
 
 #[cfg(test)]
 mod integration_tests {
-    use article_extractor::{DQNAgent, Config, Result};
+    use article_extractor::{Config, Result};
     use candle_core::Device;
     use tempfile::TempDir;
     use std::path::PathBuf;
+    use article_extractor::agents::dqn_agent::DQNAgent;
+
 
     #[test]
     fn test_agent_save_load_full_cycle() {

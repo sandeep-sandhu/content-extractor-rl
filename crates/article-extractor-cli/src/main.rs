@@ -1,10 +1,8 @@
-use article_extractor::{
-    Config, BaselineExtractor, DQNAgent,
-    ExtractedArticle, BatchExtractionResult, Result,
-    train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace,
-    Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator,
-    TrainingPlotter,
-};
+// ============================================================================
+// FILE: crates/article-extractor-cli/src/main.rs
+// ============================================================================
+
+use article_extractor::{Config, BaselineExtractor, ExtractedArticle, BatchExtractionResult, Result, train_standard, train_with_improvements, TPEOptimizer, HyperparameterSpace, Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator, TrainingPlotter, AlgorithmType};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,6 +15,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_appender::{non_blocking, rolling};
 use chrono::{Local};
 use std::error::Error;
+use article_extractor::agents::dqn_agent::DQNAgent;
 
 #[derive(Parser)]
 #[command(name = "article-extractor")]
@@ -42,6 +41,10 @@ enum Commands {
         #[arg(short, long)]
         model: Option<PathBuf>,
 
+        /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
+        #[arg(long, default_value = "dqn")]
+        algorithm: String,
+
         /// Path to site profile
         #[arg(short, long)]
         site_profile: Option<PathBuf>,
@@ -60,6 +63,10 @@ enum Commands {
         /// Path to trained model
         #[arg(short, long)]
         model: Option<PathBuf>,
+
+        /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
+        #[arg(long, default_value = "dqn")]
+        algorithm: String,
 
         /// Output directory for results
         #[arg(short, long)]
@@ -87,6 +94,10 @@ enum Commands {
         /// Use improved training (curriculum, enhanced rewards)
         #[arg(short, long)]
         improved: bool,
+
+        /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
+        #[arg(long, default_value = "dqn")]
+        algorithm: String,
 
         /// Auto-load best hyperparameters if available
         #[arg(long)]
@@ -162,6 +173,18 @@ enum Commands {
         /// Use CPU for tuning (avoid GPU memory issues)
         #[arg(long)]
         use_cpu: bool,
+
+        /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
+        #[arg(long, default_value = "dqn")]
+        algorithm: String,
+
+        /// Run trials in parallel
+        #[arg(long)]
+        parallel: bool,
+
+        /// Number of parallel workers
+        #[arg(long, default_value = "4")]
+        n_workers: usize
     },
 
     /// Evaluate extracted articles against ground truth
@@ -181,6 +204,32 @@ enum Commands {
         /// Maximum number of files to evaluate
         #[arg(long)]
         max_files: Option<usize>,
+    },
+    /// Compare multiple algorithms
+    Compare {
+        /// Training data directory
+        #[arg(short, long)]
+        data_dir: PathBuf,
+
+        /// Algorithms to compare (comma-separated: dqn,ppo,sac)
+        #[arg(long, default_value = "dqn,ppo")]
+        algorithms: String,
+
+        /// Episodes per algorithm
+        #[arg(short, long, default_value = "1000")]
+        episodes: usize,
+
+        /// Number of runs per algorithm
+        #[arg(long, default_value = "3")]
+        runs: usize,
+
+        /// Output directory
+        #[arg(short, long)]
+        output_dir: Option<PathBuf>,
+
+        /// Max samples
+        #[arg(long, default_value = "3000")]
+        max_samples: usize,
     },
 }
 
@@ -263,6 +312,7 @@ async fn main() -> Result<()> {
         Commands::Extract { .. } => "extract",
         Commands::ExtractBatch { .. } => "extract_batch",
         Commands::Evaluate { .. } => "evaluate",
+        Commands::Compare { .. } => "compare",
     };
 
     // Set up logging - keep guard to prevent early drop
@@ -274,28 +324,40 @@ async fn main() -> Result<()> {
     article_extractor::print_device_info();
 
     match cli.command {
-        Commands::Extract { html_file, url, model, site_profile, output } => {
-            extract_command(html_file, url, model, site_profile, output).await?;
+        Commands::Extract { html_file, algorithm, url, model, site_profile, output } => {
+            extract_command(html_file, algorithm, url, model, site_profile, output).await?;
         }
-        Commands::ExtractBatch { archive_dir, model, output_dir, max_files, batch_size } => {
-            extract_batch_command(archive_dir, model, output_dir, max_files, batch_size).await?;
+        Commands::ExtractBatch { archive_dir, algorithm, model, output_dir, max_files, batch_size } => {
+            extract_batch_command(archive_dir, algorithm, model, output_dir, max_files, batch_size).await?;
         }
         Commands::Train {
-            data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every,
+            data_dir, algorithm, episodes, improved, auto_hyperparams, hyperparams, plot_every,
             perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
             metrics_window, mlflow, mlflow_uri
         } => {
             train_command(
-                data_dir, episodes, improved, auto_hyperparams, hyperparams, plot_every,
+                data_dir, algorithm, episodes, improved, auto_hyperparams, hyperparams, plot_every,
                 perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
                 metrics_window, mlflow, mlflow_uri
             ).await?;
         }
-        Commands::Tune { data_dir, trials, episodes_per_trial, resume, output_dir, max_samples, use_cpu } => {
-            tune_command(data_dir, trials, episodes_per_trial, resume, output_dir, max_samples, use_cpu).await?;
+        Commands::Tune { data_dir,
+            trials,
+            episodes_per_trial,
+            resume,
+            output_dir,
+            max_samples,
+            use_cpu,
+            algorithm,
+            parallel,
+            n_workers } => {
+            tune_command(data_dir, trials, episodes_per_trial, resume, output_dir, max_samples, use_cpu, algorithm, parallel, n_workers).await?;
         }
         Commands::Evaluate { data_dir, model, output, max_files } => {
             evaluate_command(data_dir, model, output, max_files).await?;
+        }
+        Commands::Compare { data_dir, algorithms, episodes, runs, output_dir, max_samples } => {
+            compare_command(data_dir, algorithms, episodes, runs, output_dir, max_samples).await?;
         }
     }
 
@@ -304,14 +366,26 @@ async fn main() -> Result<()> {
 
 async fn extract_command(
     html_file: PathBuf,
+    algorithm: String,
     url: String,
     model_path: Option<PathBuf>,
     _site_profile_path: Option<PathBuf>,
     output: Option<PathBuf>,
 ) -> Result<()> {
-    let config = Config::from_env()
+    let mut config = Config::from_env()
         .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
+    // Parse algorithm
+    let algorithm: AlgorithmType = algorithm.parse()
+        .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
+    info!("Using algorithm: {}", algorithm);
 
+    // Use in extract_command:
+    if let Some(ref model_path) = model_path {
+        info!("Using trained model: {}", model_path.display());
+        display_model_metadata(model_path);
+    }
+    
+    config.algorithm = algorithm;
     let article = article_extractor::extract_single(
         &html_file,
         url,
@@ -326,15 +400,27 @@ async fn extract_command(
 
 async fn extract_batch_command(
     archive_dir: PathBuf,
+    algorithm: String,
     model_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     max_files: Option<usize>,
     batch_size: usize,
 ) -> Result<()> {
-    let config = Config::from_env()
+    let mut config = Config::from_env()
         .map_err(|e| article_extractor::ExtractionError::ParseError(e.to_string()))?;
+    // Parse algorithm
+    let algorithm: AlgorithmType = algorithm.parse()
+        .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
+    info!("Using algorithm: {}", algorithm);
+    config.algorithm = algorithm;
 
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
+
+    // Display model metadata if model provided
+    if let Some(ref model_path) = model_path {
+        info!("Using trained model: {}", model_path.display());
+        display_model_metadata(model_path);
+    }
 
     let result = article_extractor::extract_batch(
         &archive_dir,
@@ -370,6 +456,7 @@ fn get_url_from_json(json_path: &PathBuf) -> String {
 
 async fn train_command(
     data_dir: PathBuf,
+    algorithm: String,
     episodes: usize,
     improved: bool,
     auto_hyperparams: bool,
@@ -405,6 +492,12 @@ async fn train_command(
             Config::default()
         }
     };
+
+    // Parse algorithm
+    let algorithm: AlgorithmType = algorithm.parse()
+        .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
+    info!("Using algorithm: {}", algorithm);
+    config.algorithm = algorithm;
 
     // Apply episode count and max samples
     config.num_episodes = episodes;
@@ -584,23 +677,34 @@ async fn tune_command(
     output_dir: Option<PathBuf>,
     max_samples: usize,
     use_cpu: bool,
+    algorithm: String,  // NEW parameter
+    parallel: bool,     // NEW parameter
+    n_workers: usize,   // NEW parameter
 ) -> Result<()> {
+    use article_extractor::{TPEOptimizer, HyperparameterSpace, Hyperparameters};
     info!("{}", separator());
     info!("TPE HYPERPARAMETER TUNING");
     info!("{}", separator());
+    info!("Algorithm: {}", algorithm);
     info!("Trials: {}", trials);
     info!("Episodes per trial: {}", episodes_per_trial);
     info!("Max samples: {}", max_samples);
+    info!("Parallel: {} (workers: {})", parallel, n_workers);
     info!("Resume: {}", resume);
     info!("Use CPU: {}", use_cpu);
 
+    // Parse algorithm
+    let algo: AlgorithmType = algorithm.parse()
+        .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
+
     let mut config = Config::default();
-    config.use_cpu_for_tuning = use_cpu;
+    config.algorithm = algo;
+    config.use_cpu_for_tuning = use_cpu || parallel;  // Force CPU for parallel
 
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
     std::fs::create_dir_all(&output_dir)?;
 
-    // Load samples with limit for faster tuning
+    // Load samples
     info!("Loading HTML samples for tuning...");
     let html_samples = load_html_samples(&data_dir, Some(max_samples))?;
     info!("Loaded {} HTML samples for tuning", html_samples.len());
@@ -610,9 +714,9 @@ async fn tune_command(
         return Ok(());
     }
 
-    // Initialize optimizer with resume capability
+    // Initialize optimizer
     let space = HyperparameterSpace::default();
-    let state_path = output_dir.join("optimizer_state.json");
+    let state_path = output_dir.join(format!("optimizer_state_{}.json", algo));
 
     let mut optimizer = if resume && state_path.exists() {
         TPEOptimizer::with_resume(space, state_path.clone())?
@@ -620,107 +724,115 @@ async fn tune_command(
         TPEOptimizer::new(space)
     };
 
-    // Progress bar
-    let completed = optimizer.num_trials();
-    let remaining = trials.saturating_sub(completed);
+    if parallel {
+        // NEW: Parallel optimization
+        optimizer.optimize_parallel(
+            trials,
+            episodes_per_trial,
+            html_samples,
+            &config,
+            n_workers,
+        )?;
+    } else {
+        // Sequential optimization (existing code)
+        // Progress bar
+        let completed = optimizer.num_trials();
+        let remaining = trials.saturating_sub(completed);
 
-    if completed > 0 {
-        info!("Resuming from trial {}/{}", completed, trials);
-    }
+        if completed > 0 {
+            info!("Resuming from trial {}/{}", completed, trials);
+        }
 
-    let pb = ProgressBar::new(remaining as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} Trial {msg}")
-            .unwrap()
-            .progress_chars("█▓▒░"),
-    );
+        let pb = ProgressBar::new(remaining as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} Trial {msg}")
+                .unwrap()
+                .progress_chars("█▓▒░"),
+        );
 
-    // Run trials
-    for trial_num in completed..trials {
-        pb.set_message(format!("{}", trial_num + 1));
+        // Run trials
+        for trial_num in completed..trials {
+            pb.set_message(format!("{}", trial_num + 1));
 
-        let params = optimizer.suggest();
+            let params = optimizer.suggest();
 
-        info!("Trial {}/{}: lr={:.6}, batch={}, gamma={:.3}",
-              trial_num + 1, trials, params.learning_rate, params.batch_size, params.gamma);
+            info!("Trial {}/{}: lr={:.6}, batch={}, gamma={:.3}",
+                  trial_num + 1, trials, params.learning_rate, params.batch_size, params.gamma);
 
-        // Train with these hyperparameters
-        let mut trial_config = config.clone();
-        params.apply_to_config(&mut trial_config);
-        trial_config.num_episodes = episodes_per_trial;
-        trial_config.max_html_samples = max_samples;
+            // Train with these hyperparameters
+            let mut trial_config = config.clone();
+            params.apply_to_config(&mut trial_config);
+            trial_config.num_episodes = episodes_per_trial;
+            trial_config.max_html_samples = max_samples;
 
-        let trial_start = Instant::now();
+            let trial_start = Instant::now();
 
-        let (_agent, metrics) = train_standard(&trial_config, html_samples.clone())?;
+            let (_agent, metrics) = train_standard(&trial_config, html_samples.clone())?;
 
-        let duration = trial_start.elapsed();
+            let duration = trial_start.elapsed();
 
-        // Calculate quality score (use smaller window for faster feedback)
-        let window = metrics.episode_qualities.len().min(50);
-        let quality = if metrics.episode_qualities.len() >= window {
-            metrics.episode_qualities[metrics.episode_qualities.len() - window..]
-                .iter()
-                .sum::<f32>() / window as f32
-        } else if !metrics.episode_qualities.is_empty() {
-            metrics.episode_qualities.iter().sum::<f32>() / metrics.episode_qualities.len() as f32
-        } else {
-            0.0
-        };
-
-        let avg_reward = if !metrics.episode_rewards.is_empty() {
-            let window = metrics.episode_rewards.len().min(50);
-            if metrics.episode_rewards.len() >= window {
-                metrics.episode_rewards[metrics.episode_rewards.len() - window..]
+            // Calculate quality score (use smaller window for faster feedback)
+            let window = metrics.episode_qualities.len().min(50);
+            let quality = if metrics.episode_qualities.len() >= window {
+                metrics.episode_qualities[metrics.episode_qualities.len() - window..]
                     .iter()
                     .sum::<f32>() / window as f32
+            } else if !metrics.episode_qualities.is_empty() {
+                metrics.episode_qualities.iter().sum::<f32>() / metrics.episode_qualities.len() as f32
             } else {
-                metrics.episode_rewards.iter().sum::<f32>() / metrics.episode_rewards.len() as f32
-            }
-        } else {
-            0.0
-        };
+                0.0
+            };
 
-        // Record result
-        let trial = TrialResult {
-            trial_number: trial_num,
-            hyperparameters: Hyperparameters {
+            let avg_reward = if !metrics.episode_rewards.is_empty() {
+                let window = metrics.episode_rewards.len().min(50);
+                if metrics.episode_rewards.len() >= window {
+                    metrics.episode_rewards[metrics.episode_rewards.len() - window..]
+                        .iter()
+                        .sum::<f32>() / window as f32
+                } else {
+                    metrics.episode_rewards.iter().sum::<f32>() / metrics.episode_rewards.len() as f32
+                }
+            } else {
+                0.0
+            };
+
+            // Record result
+            let trial = TrialResult {
+                trial_number: trial_num,
+                hyperparameters: Hyperparameters {
+                    quality_score: quality as f64,
+                    ..params
+                },
                 quality_score: quality as f64,
-                ..params
-            },
-            quality_score: quality as f64,
-            avg_reward: avg_reward as f64,
-            duration_seconds: duration.as_secs_f64(),
-        };
+                avg_reward: avg_reward as f64,
+                duration_seconds: duration.as_secs_f64(),
+            };
 
-        optimizer.tell(trial);
-        pb.inc(1);
+            optimizer.tell(trial);
+            pb.inc(1);
+        }
+
+        pb.finish_with_message("Tuning complete");
     }
-
-    pb.finish_with_message("Tuning complete");
-
     // Save results
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let results_path = output_dir.join(format!("tuning_results_{}.json", timestamp));
+    let results_path = output_dir.join(format!("tuning_results_{}_{}.json", algo, timestamp));
     optimizer.save_results(&results_path)?;
 
-    // Save best hyperparameters
+    // Save the best hyperparameters with their algorithm tag
     if let Some(best) = optimizer.get_best() {
-        let best_path = config.models_dir.join("best_hyperparams.json");
+        let best_path = config.models_dir.join(format!("best_hyperparams_{}.json", algo));
         best.save(&best_path)?;
 
         info!("{}", separator());
-        info!("TUNING COMPLETED");
+        info!("TUNING COMPLETED FOR {}", algo);
         info!("{}", separator());
         info!("Best quality: {:.4}", best.quality_score);
         info!("Best hyperparameters:");
         info!("  learning_rate: {:.6}", best.learning_rate);
         info!("  batch_size: {}", best.batch_size);
         info!("  gamma: {:.3}", best.gamma);
-        info!("  epsilon_decay: {:.3}", best.epsilon_decay);
-        info!("  priority_alpha: {:.3}", best.priority_alpha);
-        info!("  priority_beta: {:.3}", best.priority_beta);
         info!("Results saved to: {}", results_path.display());
         info!("Best hyperparameters saved to: {}", best_path.display());
         info!("{}", separator());
@@ -825,6 +937,40 @@ async fn evaluate_command(
     Ok(())
 }
 
+async fn compare_command(
+    data_dir: PathBuf,
+    algorithms_str: String,
+    episodes: usize,
+    runs: usize,
+    output_dir: Option<PathBuf>,
+    max_samples: usize,
+) -> Result<()> {
+    use article_extractor::{AlgorithmComparator, AlgorithmType};
+
+    info!("Algorithm Comparison");
+    info!("Algorithms: {}", algorithms_str);
+
+    let algorithms: Vec<AlgorithmType> = algorithms_str
+        .split(',')
+        .map(|s| s.trim().parse())
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
+
+    let mut config = Config::default();
+    config.max_html_samples = max_samples;
+
+    let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
+
+    let html_samples = load_html_samples(&data_dir, Some(max_samples))?;
+
+    let comparator = AlgorithmComparator::new(config, output_dir)?;
+    let report = comparator.compare_algorithms(algorithms, html_samples, episodes, runs)?;
+
+    info!("Comparison complete! Best algorithm: {}", report.best_by_quality);
+
+    Ok(())
+}
+
 // Helper functions
 
 fn load_html_files_recursive(dir: &PathBuf, max_files: Option<usize>) -> Result<Vec<(PathBuf, PathBuf)>> {
@@ -923,3 +1069,38 @@ fn find_html_json_pairs(dir: &PathBuf, max_pairs: Option<usize>) -> Result<Vec<(
 
     Ok(pairs)
 }
+
+fn display_model_metadata(model_path: &PathBuf) {
+    use article_extractor::ModelMetadata;
+    info!("Using trained model: {}", model_path.display());
+    
+    if let Ok(metadata) = ModelMetadata::load_metadata(model_path) {
+        info!("╔═══════════════════════════════════════╗");
+        info!("║         MODEL INFORMATION             ║");
+        info!("╚═══════════════════════════════════════╝");
+        info!(" Algorithm:        {}", metadata.algorithm);
+        info!("️ Architecture:     {}", metadata.architecture);
+        info!(" Version:          {}", metadata.version);
+        info!(" Training Date:    {}", metadata.training_date);
+        info!(" Episodes:         {}", metadata.training_episodes);
+        info!(" State Dimension:  {}", metadata.state_dim);
+        info!(" Actions:          {}", metadata.num_actions);
+        info!(" Parameters:       {}", metadata.num_params);
+
+        if !metadata.hyperparameters.is_empty() {
+            info!("\n🔧 HYPERPARAMETERS:");
+            info!("{}", "─".repeat(60));
+            let mut params: Vec<_> = metadata.hyperparameters.iter().collect();
+            params.sort_by_key(|(k, _)| k.as_str());
+
+            for (key, value) in params {
+                info!("   {:<25} {:>12.6}", key, value);
+            }
+        }
+
+        info!("{}\n", "═".repeat(60));
+    } else {
+        warn!("Could not load model metadata");
+    }
+}
+

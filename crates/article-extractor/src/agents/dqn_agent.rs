@@ -1,10 +1,15 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/agents/dqn_agent.rs
+// ============================================================================
+
 use candle_core::{Device, Tensor, DType};
 use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap};
 use crate::models::DuelingDQN;
 use crate::replay_buffer::{PrioritizedReplayBuffer, SampledBatch};
-use crate::Result;
+use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
 use rand::Rng;
 use tracing::{info, warn};
+use std::path::Path;
 
 /// DQN Agent for article extraction
 pub struct DQNAgent {
@@ -447,6 +452,332 @@ impl DQNAgent {
             step_count: 0,
             device: device.clone(),
         })
+    }
+}
+
+// Implement RLAgent trait for DQNAgent
+impl RLAgent for DQNAgent {
+    fn select_action(&self, state: &[f32], epsilon: f32) -> Result<(usize, Vec<f32>)> {
+        let mut rng = rand::rng();
+
+        if rng.random::<f32>() < epsilon {
+            let discrete_action = rng.random_range(0..self.num_actions);
+            let params: Vec<f32> = (0..self.num_params)
+                .map(|_| rng.random_range(-1.0..1.0))
+                .collect();
+            Ok((discrete_action, params))
+        } else {
+            let state_tensor = Tensor::from_vec(state.to_vec(), &[1, state.len()], &self.device)
+                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+            let (q_values, param_mean, _param_std) = self.online_network.forward(&state_tensor, false)
+                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+            let q_vals = q_values.to_vec2::<f32>()
+                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+            let discrete_action = q_vals[0].iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(idx, _)| idx)
+                .unwrap_or(0);
+
+            let params = param_mean.to_vec2::<f32>()
+                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+            let continuous_params = params[0].clone();
+
+            Ok((discrete_action, continuous_params))
+        }
+    }
+
+
+    /// Complete training step with proper loss calculation
+    fn train_step(&mut self, replay_buffer: &mut PrioritizedReplayBuffer, batch_size: usize) -> Result<f32> {
+        let batch = replay_buffer.sample(batch_size);
+
+        if batch.is_none() {
+            return Ok(0.0);
+        }
+
+        let SampledBatch { experiences, indices, weights } = batch.unwrap();
+
+        // Extract components from experiences
+        let states: Vec<Vec<f32>> = experiences.iter()
+            .map(|e| e.state.clone())
+            .collect();
+        let actions_discrete: Vec<usize> = experiences.iter()
+            .map(|e| e.action.0)
+            .collect();
+        let actions_params: Vec<Vec<f32>> = experiences.iter()
+            .map(|e| e.action.1.clone())
+            .collect();
+        let rewards: Vec<f32> = experiences.iter()
+            .map(|e| e.reward)
+            .collect();
+        let next_states: Vec<Vec<f32>> = experiences.iter()
+            .map(|e| e.next_state.clone())
+            .collect();
+        let dones: Vec<f32> = experiences.iter()
+            .map(|e| if e.done { 1.0 } else { 0.0 })
+            .collect();
+
+        // Convert to tensors
+        let state_dim = states[0].len();
+        let states_flat: Vec<f32> = states.into_iter().flatten().collect();
+        let states_tensor = Tensor::from_vec(
+            states_flat,
+            &[batch_size, state_dim],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let next_states_flat: Vec<f32> = next_states.into_iter().flatten().collect();
+        let next_states_tensor = Tensor::from_vec(
+            next_states_flat,
+            &[batch_size, state_dim],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let rewards_tensor = Tensor::from_vec(
+            rewards,
+            &[batch_size],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let dones_tensor = Tensor::from_vec(
+            dones,
+            &[batch_size],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let weights_tensor = Tensor::from_vec(
+            weights,
+            &[batch_size],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Actions tensors
+        let actions_discrete_tensor = Tensor::from_vec(
+            actions_discrete.iter().map(|&x| x as i64).collect::<Vec<_>>(),
+            &[batch_size],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let actions_params_flat: Vec<f32> = actions_params.into_iter().flatten().collect();
+        let actions_params_tensor = Tensor::from_vec(
+            actions_params_flat,
+            &[batch_size, self.num_params],
+            &self.device
+        ).map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Forward pass through online network
+        let (q_values, param_means, param_stds) = self.online_network.forward(&states_tensor, true)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // VALIDATION: Check for NaN/Inf in forward pass
+        let q_sample = q_values.get(0)?.to_vec1::<f32>()?;
+        if q_sample.iter().any(|&x| x.is_nan() || x.is_infinite()) {
+            return Err(crate::ExtractionError::ModelError(
+                "NaN/Inf detected in Q-values forward pass".to_string()
+            ));
+        }
+
+        // Gather Q-values for taken actions
+        let q_values_selected = q_values
+            .gather(&actions_discrete_tensor.unsqueeze(1)?, 1)?
+            .squeeze(1)?;
+
+        // Double DQN: Use online network to select actions, target network to evaluate
+        let (next_q_online, _, _) = self.online_network.forward(&next_states_tensor, false)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let next_actions = next_q_online.argmax(1)?;
+
+        let (next_q_target, _, _) = self.target_network.forward(&next_states_tensor, false)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let next_q_values = next_q_target
+            .gather(&next_actions.unsqueeze(1)?, 1)?
+            .squeeze(1)?;
+
+        // Calculate TD targets with proper shape broadcasting
+        let ones = Tensor::ones(&[batch_size], DType::F32, &self.device)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Create gamma tensor with same shape as batch
+        let gamma_vec = vec![self.gamma; batch_size];
+        let gamma_tensor = Tensor::from_vec(gamma_vec, &[batch_size], &self.device)?;
+
+        // Calculate discount factors: gamma * (1 - done)
+        let discount_factors = (ones - dones_tensor)?
+            .mul(&gamma_tensor)?;
+
+        // TD target: reward + gamma * (1 - done) * next_q
+        let td_targets = rewards_tensor
+            .add(&next_q_values.mul(&discount_factors)?)?;
+
+        // Calculate TD errors for priority update
+        let td_errors_tensor = (td_targets.clone() - q_values_selected.clone())?;
+        let td_errors: Vec<f32> = td_errors_tensor
+            .to_vec1()
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Q-value loss (Smooth L1 / Huber loss)
+        let q_loss_elements = smooth_l1_loss(&q_values_selected, &td_targets)?;
+        let weighted_q_loss = (q_loss_elements * weights_tensor.clone())?;
+        let loss_q = weighted_q_loss.mean_all()?;
+
+        // Parameter loss (Negative log-likelihood of Gaussian)
+        let param_loss = self.calculate_param_loss(&param_means, &param_stds, &actions_params_tensor)?;
+
+        // Combine losses
+        let loss_q_scalar = loss_q.to_scalar::<f32>()
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let param_loss_scalar = param_loss.to_scalar::<f32>()
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let total_loss_scalar = loss_q_scalar + 0.1 * param_loss_scalar;
+
+        // Create tensor from combined scalar
+        let total_loss = Tensor::from_vec(
+            vec![total_loss_scalar],
+            &[1],
+            &self.device
+        )?;
+
+        // VALIDATION: Check final loss
+        if total_loss_scalar.is_nan() || total_loss_scalar.is_infinite() {
+            return Err(crate::ExtractionError::ModelError(
+                format!("Invalid loss: {}", total_loss_scalar)
+            ));
+        }
+
+        // Get GradStore from backward pass
+        // Perform backward pass to get gradients
+        let mut grad_store = total_loss.backward()?;
+
+        // IMPROVED: Clip gradients to prevent explosion
+        // Get all trainable variables from the varmap
+        let vars = self.varmap.all_vars();
+        let max_grad_norm = 1.0f32;
+        let mut total_norm_sq = 0.0f32;
+
+        // Calculate total gradient norm for all trainable variables
+        for var in &vars {
+            if let Some(grad) = grad_store.get(var) {
+                let norm_sq = grad.sqr()?.sum_all()?.to_scalar::<f32>()?;
+                total_norm_sq += norm_sq;
+            }
+        }
+
+        let total_norm = total_norm_sq.sqrt();
+
+        // Apply gradient clipping if needed
+        if total_norm > max_grad_norm {
+            let clip_coef = max_grad_norm / (total_norm + 1e-6);
+
+            // Apply clipping to each gradient
+            for var in self.varmap.all_vars() {
+                if let Some(grad) = grad_store.get(&var) {
+                    // Create a tensor for the clip coefficient
+                    let clip_coef_tensor = Tensor::from_vec(
+                        vec![clip_coef],
+                        &[1],
+                        &self.device
+                    )?;
+
+                    // Multiply gradient by clip coefficient
+                    let clipped_grad = grad.mul(&clip_coef_tensor)?;
+
+                    // Update the gradient in the grad store
+                    grad_store.insert(&var, clipped_grad);
+                }
+            }
+
+            if self.step_count % 1000 == 0 {
+                info!("Gradient norm: {:.4}, clipped with coef: {:.4}", total_norm, clip_coef);
+            }
+        }
+
+        // Step the optimizer with gradients
+        self.optimizer.step(&grad_store)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Update priorities in replay buffer
+        replay_buffer.update_priorities(&indices, &td_errors);
+
+        self.step_count += 1;
+
+        // Return loss value
+        Ok(total_loss_scalar)
+    }
+
+    fn update_target_network(&mut self) {
+        if let Err(e) = Self::copy_network_weights(&self.online_network, &mut self.target_network) {
+            warn!("Failed to update target network: {}", e);
+        } else {
+            info!("Target network updated (hard update)");
+        }
+    }
+
+    fn get_step_count(&self) -> usize {
+        self.step_count
+    }
+    
+    fn save_with_metadata(
+        &self,
+        path: &Path,
+        training_episodes: usize,
+        hyperparameters: std::collections::HashMap<String, f64>,
+    ) -> Result<()> {
+        use crate::models::ModelMetadata;
+
+        let metadata = ModelMetadata::new(
+            300,  // state_dim - should get from self
+            self.num_actions,
+            self.num_params,
+            AlgorithmType::DuelingDQN,
+            training_episodes,
+            hyperparameters,
+        );
+
+        self.online_network.save_to_onnx_with_metadata(path, metadata)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        let safetensors_path = path.with_extension("safetensors");
+        self.online_network.save_to_safetensors(&safetensors_path)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        tracing::info!("Model saved with metadata: ONNX ({} bytes), SafeTensors ({} bytes)",
+               std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+               std::fs::metadata(&safetensors_path).map(|m| m.len()).unwrap_or(0));
+
+        Ok(())
+    }
+
+    fn save(&self, path: &Path) -> Result<()> {
+        // Default save without extra metadata
+        self.save_with_metadata(path, 0, std::collections::HashMap::new())
+    }
+
+
+    fn algorithm_type(&self) -> AlgorithmType {
+        AlgorithmType::DuelingDQN
+    }
+
+    fn get_info(&self) -> AgentInfo {
+        AgentInfo {
+            algorithm: AlgorithmType::DuelingDQN,
+            num_parameters: 338525,
+            state_dim: 300,
+            num_actions: self.num_actions,
+            continuous_params: self.num_params,
+            version: "1.0.0".to_string(),
+            features: vec![
+                "dueling".to_string(),
+                "double_dqn".to_string(),
+                "prioritized_replay".to_string(),
+            ],
+        }
     }
 }
 

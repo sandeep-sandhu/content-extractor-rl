@@ -1,4 +1,7 @@
 //! Hyperparameter tuning using TPE (Tree-structured Parzen Estimator) with resume capability
+// ============================================================================
+// FILE: crates/article-extractor/src/hyperparameter_tuner.rs
+// ============================================================================
 
 use crate::{Config, Result};
 use serde::{Deserialize, Serialize};
@@ -6,6 +9,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use rand::Rng;
 use tracing::{info, debug, warn};
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 
 /// Hyperparameter search space
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +132,120 @@ impl TPEOptimizer {
             n_startup_trials: 5, // As per requirement
             state_path: None,
         }
+    }
+
+    /// Run parallel hyperparameter optimization
+    pub fn optimize_parallel(
+        &mut self,
+        n_trials: usize,
+        episodes_per_trial: usize,
+        html_samples: Vec<(String, String)>,
+        base_config: &Config,
+        n_workers: usize,
+    ) -> Result<()> {
+        info!("Starting parallel TPE optimization with {} workers", n_workers);
+        // Configure rayon thread pool
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(n_workers)
+            .build()
+            .map_err(|e| crate::ExtractionError::RuntimeError(e.to_string()))?;
+
+        // Shared state with mutex
+        let optimizer_state = Arc::new(Mutex::new(self));
+        let completed_trials = Arc::new(Mutex::new(0usize));
+
+        // Generate all trial parameters upfront (sequential, uses TPE logic)
+        let mut all_trial_params = Vec::new();
+        for trial_num in 0..n_trials {
+            let params = {
+                let opt = optimizer_state.lock().unwrap();
+                opt.suggest()
+            };
+            all_trial_params.push((trial_num, params));
+        }
+
+        // Run trials in parallel
+        pool.install(|| {
+            all_trial_params.par_iter().for_each(|(trial_num, params)| {
+                info!("Worker starting trial {}", trial_num);
+
+                // Each worker gets its own config and data
+                let mut trial_config = base_config.clone();
+                params.apply_to_config(&mut trial_config);
+                trial_config.num_episodes = episodes_per_trial;
+
+                // Use CPU for parallel trials to avoid GPU contention
+                trial_config.use_cpu_for_tuning = true;
+
+                let trial_start = std::time::Instant::now();
+
+                // Run training
+                let result = crate::training::train_standard(&trial_config, html_samples.clone());
+
+                match result {
+                    Ok((_agent, metrics)) => {
+                        let duration = trial_start.elapsed();
+
+                        // Calculate quality
+                        let window = metrics.episode_qualities.len().min(50);
+                        let quality = if metrics.episode_qualities.len() >= window {
+                            metrics.episode_qualities[metrics.episode_qualities.len() - window..]
+                                .iter()
+                                .sum::<f32>() / window as f32
+                        } else if !metrics.episode_qualities.is_empty() {
+                            metrics.episode_qualities.iter().sum::<f32>() /
+                                metrics.episode_qualities.len() as f32
+                        } else {
+                            0.0
+                        };
+
+                        let avg_reward = if !metrics.episode_rewards.is_empty() {
+                            let window = metrics.episode_rewards.len().min(50);
+                            if metrics.episode_rewards.len() >= window {
+                                metrics.episode_rewards[metrics.episode_rewards.len() - window..]
+                                    .iter()
+                                    .sum::<f32>() / window as f32
+                            } else {
+                                metrics.episode_rewards.iter().sum::<f32>() /
+                                    metrics.episode_rewards.len() as f32
+                            }
+                        } else {
+                            0.0
+                        };
+
+                        // Record result
+                        let trial_result = TrialResult {
+                            trial_number: *trial_num,
+                            hyperparameters: Hyperparameters {
+                                quality_score: quality as f64,
+                                ..params.clone()
+                            },
+                            quality_score: quality as f64,
+                            avg_reward: avg_reward as f64,
+                            duration_seconds: duration.as_secs_f64(),
+                        };
+
+                        {
+                            let mut opt = optimizer_state.lock().unwrap();
+                            opt.tell(trial_result);
+                        }
+
+                        {
+                            let mut completed = completed_trials.lock().unwrap();
+                            *completed += 1;
+                            info!("Trial {} completed ({}/{}): quality={:.4}",
+                              trial_num, *completed, n_trials, quality);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Trial {} failed: {}", trial_num, e);
+                    }
+                }
+            });
+        });
+
+        info!("Parallel optimization complete");
+        Ok(())
     }
 
     /// Create optimizer with resume capability

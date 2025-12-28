@@ -1,3 +1,7 @@
+// ============================================================================
+// FILE: crates/article-extractor/src/models.rs
+// ============================================================================
+
 use candle_core::{Device, Tensor, DType, Result as CandleResult, Var};
 use candle_nn::{Linear, Module, VarBuilder, linear, layer_norm, LayerNorm};
 use serde::{Deserialize, Serialize};
@@ -6,15 +10,95 @@ use std::path::Path;
 use safetensors::SafeTensors;
 use safetensors::tensor::{Dtype, TensorView};
 use tracing::{error, info, warn};
+use crate::agents::AlgorithmType;
+use chrono;
 
-/// Model metadata for serialization
-#[derive(Debug, Serialize, Deserialize)]
+/// Enhanced model metadata with algorithm and hyperparameters
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModelMetadata {
     pub state_dim: usize,
     pub num_actions: usize,
     pub num_params: usize,
     pub architecture: String,
+    pub algorithm: String,  // NEW: Algorithm type
     pub version: String,
+    pub training_date: String,  // NEW: When model was trained
+    pub training_episodes: usize,  // NEW: Training duration
+    pub hyperparameters: HashMap<String, f64>,  // NEW: Hyperparameters used
+}
+
+impl ModelMetadata {
+    /// Create new metadata
+    pub fn new(
+        state_dim: usize,
+        num_actions: usize,
+        num_params: usize,
+        algorithm: AlgorithmType,
+        training_episodes: usize,
+        hyperparameters: HashMap<String, f64>,
+    ) -> Self {
+        Self {
+            state_dim,
+            num_actions,
+            num_params,
+            architecture: "DuelingDQN".to_string(),  // This should match algorithm
+            algorithm: algorithm.to_string(),
+            version: "1.0.0".to_string(),
+            training_date: chrono::Utc::now().to_rfc3339(),
+            training_episodes,
+            hyperparameters,
+        }
+    }
+
+    /// Load metadata from model file without loading full model
+    pub fn load_metadata(path: &Path) -> candle_core::error::Result<ModelMetadata> {
+        use std::fs::File;
+        use std::io::Read;
+
+        let mut file = File::open(path)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        let mut metadata_len_bytes = [0u8; 8];
+        file.read_exact(&mut metadata_len_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+        let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
+
+        let mut metadata_bytes = vec![0u8; metadata_len];
+        file.read_exact(&mut metadata_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        let metadata_json = String::from_utf8(metadata_bytes)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        let metadata: ModelMetadata = serde_json::from_str(&metadata_json)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+
+        Ok(metadata)
+    }
+
+    /// Display metadata in formatted way
+    pub fn display(&self) {
+        println!("╔═══════════════════════════════════════════════════════════╗");
+        println!("║                    MODEL METADATA                          ║");
+        println!("╠═══════════════════════════════════════════════════════════╣");
+        println!("║ Algorithm: {:<47} ║", self.algorithm);
+        println!("║ Architecture: {:<44} ║", self.architecture);
+        println!("║ Version: {:<49} ║", self.version);
+        println!("║ Training Date: {:<43} ║", self.training_date);
+        println!("║ Training Episodes: {:<39} ║", self.training_episodes);
+        println!("║ State Dim: {:<47} ║", self.state_dim);
+        println!("║ Num Actions: {:<45} ║", self.num_actions);
+        println!("║ Num Params: {:<46} ║", self.num_params);
+        if !self.hyperparameters.is_empty() {
+            println!("╠═══════════════════════════════════════════════════════════╣");
+            println!("║                    HYPERPARAMETERS                         ║");
+            println!("╠═══════════════════════════════════════════════════════════╣");
+            for (key, value) in &self.hyperparameters {
+                println!("║ {:<30} {:>27.6} ║", key, value);
+            }
+        }
+        println!("╚═══════════════════════════════════════════════════════════╝");
+    }
 }
 
 /// Dueling DQN network architecture
@@ -85,7 +169,7 @@ fn save_layernorm(
 }
 
 impl DuelingDQN {
-    /// IMPROVED: Copy weights from another network
+    /// Copy weights from another network
     pub fn copy_weights_from(&mut self, source: &DuelingDQN) -> CandleResult<()> {
         // Helper to copy a linear layer
         fn copy_linear(dest: &Linear, src: &Linear) -> CandleResult<()> {
@@ -254,18 +338,39 @@ impl DuelingDQN {
         Ok((q_values, param_mean, param_std))
     }
 
-    /// Save model to ONNX format
+    /// Legacy save method (for backwards compatibility)
     pub fn save_to_onnx(&self, path: &Path) -> CandleResult<()> {
-        use std::fs::File;
-        use std::io::Write;
-
         let metadata = ModelMetadata {
             state_dim: self.state_dim,
             num_actions: self.num_actions,
             num_params: self.num_params,
             architecture: "DuelingDQN".to_string(),
-            version: "0.3.0".to_string(),
+            algorithm: "DuelingDQN".to_string(),
+            version: "1.0.0".to_string(),
+            training_date: chrono::Utc::now().to_rfc3339(),
+            training_episodes: 0,
+            hyperparameters: HashMap::new(),
         };
+        self.save_to_onnx_with_metadata(path, metadata)
+    }
+
+    /// Save model to ONNX format
+    pub fn save_to_onnx_with_metadata(&self, path: &Path, metadata: ModelMetadata) -> CandleResult<()> {
+        use std::fs::File;
+        use std::io::Write;
+        let mut file = File::create(path)
+            .map_err(|e| candle_core::Error::Io(e))?;
+
+        // Write metadata
+        let metadata_json = serde_json::to_string(&metadata)
+            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
+        let metadata_bytes = metadata_json.as_bytes();
+        let metadata_len = metadata_bytes.len() as u64;
+
+        file.write_all(&metadata_len.to_le_bytes())
+            .map_err(|e| candle_core::Error::Io(e))?;
+        file.write_all(metadata_bytes)
+            .map_err(|e| candle_core::Error::Io(e))?;
 
         let mut file = File::create(path)
             .map_err(|e| candle_core::Error::Io(e))?;
@@ -317,6 +422,7 @@ impl DuelingDQN {
             let non_zero = data.iter().filter(|&&x| x.abs() > 1e-10).count();
             let zero_percent = 100.0 * (1.0 - non_zero as f64 / data.len() as f64);
             if zero_percent > 95.0 {
+                // TODO: ignore if name is 'ln1.bias', 'ln2.bias', or 'ln1.bias'
                 warn!("WARNING: Tensor '{}' is {:.1}% zeros", name, zero_percent);
             }
         }
@@ -367,6 +473,11 @@ impl DuelingDQN {
 
         info!("Model saved successfully: {} bytes", file_size);
         Ok(())
+    }
+
+    /// Load metadata only
+    pub fn load_metadata(path: &Path) -> CandleResult<ModelMetadata> {
+        ModelMetadata::load_metadata(path)
     }
 
     /// Save model in SafeTensors format

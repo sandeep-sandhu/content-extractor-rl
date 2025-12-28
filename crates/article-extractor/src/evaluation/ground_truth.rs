@@ -1,4 +1,8 @@
 //! Enhanced evaluation against ground truth data from pre-extracted JSON files
+// ============================================================================
+// FILE: crates/article-extractor/src/ground_truth.rs
+// ============================================================================
+
 
 use crate::{Result, text_utils::TextUtils};
 use serde::{Deserialize, Serialize};

@@ -1,4 +1,7 @@
 //! Model checkpoint management
+// ============================================================================
+// FILE: crates/article-extractor/src/checkpoint.rs
+// ============================================================================
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
