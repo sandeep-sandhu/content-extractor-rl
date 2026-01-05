@@ -175,7 +175,7 @@ impl Config {
         let mut config = Self::default();
 
         // GPU-specific optimizations
-        config.batch_size = 8192;                    // Much larger batches
+        config.batch_size = 6144;                    // Much larger batches
         config.num_train_steps_per_episode = 32;    // Many gradient updates
         config.train_freq = 1;                       // Train every step
         config.replay_buffer_size = 500000;          // Larger buffer

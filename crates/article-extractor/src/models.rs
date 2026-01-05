@@ -41,7 +41,7 @@ impl ModelMetadata {
             state_dim,
             num_actions,
             num_params,
-            architecture: "DuelingDQN".to_string(),  // This should match algorithm
+            architecture: algorithm.to_string(),
             algorithm: algorithm.to_string(),
             version: "1.0.0".to_string(),
             training_date: chrono::Utc::now().to_rfc3339(),
@@ -78,26 +78,26 @@ impl ModelMetadata {
 
     /// Display metadata in formatted way
     pub fn display(&self) {
-        println!("╔═══════════════════════════════════════════════════════════╗");
-        println!("║                    MODEL METADATA                          ║");
-        println!("╠═══════════════════════════════════════════════════════════╣");
-        println!("║ Algorithm: {:<47} ║", self.algorithm);
-        println!("║ Architecture: {:<44} ║", self.architecture);
-        println!("║ Version: {:<49} ║", self.version);
-        println!("║ Training Date: {:<43} ║", self.training_date);
-        println!("║ Training Episodes: {:<39} ║", self.training_episodes);
-        println!("║ State Dim: {:<47} ║", self.state_dim);
-        println!("║ Num Actions: {:<45} ║", self.num_actions);
-        println!("║ Num Params: {:<46} ║", self.num_params);
+        info!("╔════════════════════════════════════════════════════════════╗");
+        info!("║                    MODEL METADATA                          ║");
+        info!("╠════════════════════════════════════════════════════════════╣");
+        info!("║ Algorithm: {:<47} ║", self.algorithm);
+        info!("║ Architecture: {:<44} ║", self.architecture);
+        info!("║ Version: {:<49} ║", self.version);
+        info!("║ Training Date: {:<43} ║", self.training_date);
+        info!("║ Training Episodes: {:<39} ║", self.training_episodes);
+        info!("║ State Dim: {:<47} ║", self.state_dim);
+        info!("║ Num Actions: {:<45} ║", self.num_actions);
+        info!("║ Num Params: {:<46} ║", self.num_params);
         if !self.hyperparameters.is_empty() {
-            println!("╠═══════════════════════════════════════════════════════════╣");
-            println!("║                    HYPERPARAMETERS                         ║");
-            println!("╠═══════════════════════════════════════════════════════════╣");
+            info!("╠════════════════════════════════════════════════════════════╣");
+            info!("║                    HYPERPARAMETERS                         ║");
+            info!("╠════════════════════════════════════════════════════════════╣");
             for (key, value) in &self.hyperparameters {
-                println!("║ {:<30} {:>27.6} ║", key, value);
+                info!("║ {:<30} {:>27.6} ║", key, value);
             }
         }
-        println!("╚═══════════════════════════════════════════════════════════╝");
+        info!("╚════════════════════════════════════════════════════════════╝");
     }
 }
 

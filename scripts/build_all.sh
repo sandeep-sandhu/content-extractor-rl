@@ -54,5 +54,5 @@ echo "  CLI: target/release/article-extractor"
 echo "Python wheels:"
 echo "  $(ls crates/article-extractor-py/target/wheels/*.whl 2>/dev/null || echo 'None')"
 
-pip3 install -U crates/article-extractor-py/target/wheels/*.whl
+# pip3 install -U crates/article-extractor-py/target/wheels/*.whl
 

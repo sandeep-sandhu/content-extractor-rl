@@ -278,9 +278,14 @@ pub fn train_standard(
         }
         pb.inc(1);
 
-        // Save checkpoint every 1000 episodes (only for long runs)
-        if episode % 1000 == 0 && episode > 0 && config.num_episodes >= 5000 {
-            let checkpoint_path = config.models_dir.join(format!("checkpoint_ep{}.onnx", episode));
+        // Save checkpoint every checkpoint_freq episodes (only for long runs)
+        if episode % config.checkpoint_freq == 0 && episode > 0 && config.num_episodes >= 5000 {
+            let checkpoint_path = config.models_dir.join(format!(
+                "checkpoint_{}_{}_ep{}.onnx",
+                config.algorithm.to_string().to_lowercase(),
+                chrono::Utc::now().format("%Y%m%d_%H%M%S"),
+                episode
+            ));
 
             // Validate save was successful
             match agent.save(&checkpoint_path) {
@@ -313,7 +318,6 @@ pub fn train_standard(
 
                     match checkpoint_manager.save_checkpoint(&checkpoint) {
                         Ok(_) => {
-                            // Verify the saved model file
                             if checkpoint_path.exists() {
                                 let metadata = std::fs::metadata(&checkpoint_path)?;
                                 if metadata.len() > 0 {
@@ -340,8 +344,12 @@ pub fn train_standard(
 
     pb.finish_with_message("Training completed");
 
-    // Save final model with validation and metadata
-    let final_path = config.models_dir.join("final_model.onnx");
+    // Save final model with validation, metadata and with algorithm name
+    let final_path = config.models_dir.join(format!(
+        "final_model_{}.onnx",
+        config.algorithm.to_string().to_lowercase()
+    ));
+
     let mut hyperparams = std::collections::HashMap::new();
     hyperparams.insert("learning_rate".to_string(), config.learning_rate);
     hyperparams.insert("batch_size".to_string(), config.batch_size as f64);
@@ -355,6 +363,7 @@ pub fn train_standard(
         let metadata = std::fs::metadata(&final_path)?;
         info!("Final model saved: {} bytes", metadata.len());
     }
+
     // Display metadata
     if let Ok(model_meta) = crate::models::ModelMetadata::load_metadata(&final_path) {
         model_meta.display();
@@ -362,7 +371,7 @@ pub fn train_standard(
 
     site_memory.save_all()?;
 
-    // Save final checkpoint
+    // Save final checkpoint with algorithm-specific path
     let final_checkpoint = Checkpoint::new(
         config.num_episodes,
         agent.get_step_count(),
@@ -701,7 +710,13 @@ pub fn train_with_improvements(
 
         // Save checkpoint every 500 episodes (more frequent for safety)
         if episode % config.checkpoint_freq == 0 && episode > 0 {
-            let checkpoint_path = config.models_dir.join(format!("checkpoint_ep{}.onnx", episode));
+            let checkpoint_path = config.models_dir.join(format!(
+                "checkpoint_{}_{}_ep{}.onnx",
+                config.algorithm.to_string().to_lowercase(),
+                chrono::Utc::now().format("%Y%m%d_%H%M%S"),
+                episode
+            ));
+
             match agent.save(&checkpoint_path) {
                 Ok(_) => {
                     // Save step counts alongside model
@@ -711,7 +726,6 @@ pub fn train_with_improvements(
                         let _ = std::fs::write(&step_counts_path, step_data);
                     }
 
-                    // Create checkpoint metadata
                     let avg_reward = if metrics.episode_rewards.len() >= 100 {
                         metrics.episode_rewards[metrics.episode_rewards.len() - 100..]
                             .iter()
@@ -730,7 +744,7 @@ pub fn train_with_improvements(
 
                     let checkpoint = Checkpoint::new(
                         episode,
-                        total_training_steps,  // Use total training steps as step count
+                        total_training_steps,
                         avg_reward,
                         avg_quality,
                         metrics.best_avg_quality,
@@ -748,7 +762,7 @@ pub fn train_with_improvements(
                             warn!("Failed to save checkpoint metadata: {}", e);
                         }
                     }
-                    // Verify file size
+
                     if let Ok(metadata) = std::fs::metadata(&checkpoint_path) {
                         let file_size = metadata.len();
                         if file_size < 10_000 {
@@ -762,10 +776,9 @@ pub fn train_with_improvements(
                     warn!("Failed to save model checkpoint: {}", e);
                 }
             }
-            info!("Saved checkpoint at episode {}", episode);
         }
 
-        // Track best model
+        // Track best model with algorithm-specific name
         if metrics.episode_qualities.len() >= 100 {
             let avg_quality = metrics.episode_qualities[metrics.episode_qualities.len() - 100..]
                 .iter()
@@ -773,14 +786,19 @@ pub fn train_with_improvements(
 
             if avg_quality > metrics.best_avg_quality {
                 metrics.best_avg_quality = avg_quality;
-                let best_path = config.models_dir.join("best_model.onnx");
+                let best_path = config.models_dir.join(format!(
+                    "best_model_{}.onnx",
+                    config.algorithm.to_string().to_lowercase()
+                ));
+
                 match agent.save(&best_path) {
                     Ok(_) => {
                         if let Ok(metadata) = std::fs::metadata(&best_path) {
-                            info!("New best model saved with quality: {:.3} ({} bytes)",
-                                  avg_quality, metadata.len());
+                            info!("New best {} model saved with quality: {:.3} ({} bytes)",
+                                  config.algorithm, avg_quality, metadata.len());
                         } else {
-                            info!("New best model saved with quality: {:.3}", avg_quality);
+                            info!("New best {} model saved with quality: {:.3}",
+                                  config.algorithm, avg_quality);
                         }
                     }
                     Err(e) => {
@@ -793,8 +811,12 @@ pub fn train_with_improvements(
 
     pb.finish_with_message("Improved training completed");
 
-    // Save final model with validation and metadata
-    let final_path = config.models_dir.join("final_model.onnx");
+    // Save final model with validation, metadata and algorithm name
+    let final_path = config.models_dir.join(format!(
+        "final_model_{}.onnx",
+        config.algorithm.to_string().to_lowercase()
+    ));
+
     let mut hyperparams = std::collections::HashMap::new();
     hyperparams.insert("learning_rate".to_string(), config.learning_rate);
     hyperparams.insert("batch_size".to_string(), config.batch_size as f64);
@@ -808,6 +830,7 @@ pub fn train_with_improvements(
         let metadata = std::fs::metadata(&final_path)?;
         info!("Final model saved: {} bytes", metadata.len());
     }
+
     // Display metadata
     if let Ok(model_meta) = crate::models::ModelMetadata::load_metadata(&final_path) {
         model_meta.display();

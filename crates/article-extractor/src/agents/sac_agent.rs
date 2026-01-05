@@ -316,7 +316,7 @@ impl SACAgent {
         // Sample continuous params (reparameterization trick)
         let param_std = param_logstd.exp()?;
 
-        // FIXED: Use randn with shape instead of randn_like
+        // Use randn with proper shape
         let noise = Tensor::randn(0.0, 1.0, param_mean.shape(), &self.device)?;
         let action_continuous = (param_mean.clone() + param_std.clone() * noise)?;
 
@@ -330,28 +330,66 @@ impl SACAgent {
 
     /// Gumbel-Softmax for discrete actions
     fn gumbel_softmax(&self, logits: &Tensor, temperature: f32) -> candle_core::error::Result<Tensor> {
-        // FIXED: Use randn with shape and manually compute gumbel
+        // FIXED: Proper Gumbel noise generation
         let uniform = Tensor::rand(0.0, 1.0, logits.shape(), logits.device())?;
-        let gumbel = (uniform.log()?.neg()?).log()?.neg()?;
 
-        let temp_tensor = Tensor::new(&[temperature], logits.device())?;
+        // Gumbel noise: -log(-log(U))
+        let eps = 1e-10;
+        let gumbel = uniform.clamp(eps, 1.0 - eps)?;
+        let gumbel = gumbel.log()?.neg()?;
+        let gumbel = gumbel.log()?.neg()?;
+
+        // FIXED: Create temperature tensor with proper broadcasting
+        let batch_size = logits.dims()[0];
+        let num_actions = logits.dims()[1];
+        let temp_tensor = Tensor::new(
+            vec![temperature; batch_size * num_actions],
+            logits.device()
+        )?.reshape(&[batch_size, num_actions])?;
+
         let y = (logits.clone() + gumbel)?.div(&temp_tensor)?;
         softmax(&y, 1)
     }
 
     /// Gaussian log probability
     fn gaussian_log_prob(&self, mean: &Tensor, std: &Tensor, value: &Tensor) -> candle_core::error::Result<Tensor> {
-        let variance = std.sqr()?;
-        let log_std = std.log()?;
+        // Ensure proper shape broadcasting
+        let batch_size = mean.dims()[0];
+        let num_params = mean.dims()[1];
+
+        // Broadcast std to match mean if needed
+        let std_broadcast = if std.dims().len() == 1 {
+            std.unsqueeze(0)?.broadcast_as(mean.shape())?
+        } else {
+            std.clone()
+        };
+
+        let variance = std_broadcast.sqr()?;
+        let log_std = std_broadcast.log()?;
         let diff = (value - mean)?;
 
-        let log_prob = -0.5 * (
-            diff.sqr()?.div(&variance)? +
-                Tensor::new(&[2.0 * std::f32::consts::PI], mean.device())?.log()? +
-                log_std.mul(&Tensor::new(&[2.0f32], mean.device())?)?
-        )?;
+        // Create pi constant with proper shape
+        let pi_constant = Tensor::new(
+            vec![2.0 * std::f32::consts::PI; batch_size * num_params],
+            mean.device()
+        )?.reshape(&[batch_size, num_params])?;
 
-        log_prob?.sum(1)
+        // Create half tensor with proper shape
+        let half_tensor = Tensor::new(
+            vec![0.5f32; batch_size * num_params],
+            mean.device()
+        )?.reshape(&[batch_size, num_params])?;
+
+        let nll = half_tensor.mul(&(
+            diff.sqr()?.div(&variance)? +
+                pi_constant.log()? +
+                log_std.mul(&Tensor::new(
+                    vec![2.0f32; batch_size * num_params],
+                    mean.device()
+                )?.reshape(&[batch_size, num_params])?)?
+        )?)?;
+
+        nll.sum(1)
     }
 
     /// Soft update of target network
@@ -606,10 +644,22 @@ impl RLAgent for SACAgent {
         let (next_q1, next_q2) = self.target_critic.forward(&next_states, &next_action_discrete, &next_action_continuous)?;
         let next_q = next_q1.minimum(&next_q2)?;
 
-        let alpha_broadcast = alpha.broadcast_as(next_log_prob.shape())?;
+        // FIXED: Broadcast alpha to match batch size
+        let batch_size = experiences.len();
+        let alpha_broadcast = alpha.broadcast_as(&[batch_size])?;
+
+        // FIXED: Create gamma tensor with proper shape
+        let gamma_tensor = Tensor::new(
+            vec![self.gamma; batch_size],
+            &self.device
+        )?;
+
+        // FIXED: Create ones tensor
+        let ones = Tensor::ones(&[batch_size], candle_core::DType::F32, &self.device)?;
+
         let target_q = (
             rewards_tensor.clone() +
-                (Tensor::ones_like(&dones_tensor)? - dones_tensor.clone())?.mul(&Tensor::new(&[self.gamma], &self.device)?)?.mul(
+                (ones - dones_tensor.clone())?.mul(&gamma_tensor)?.mul(
                     &(next_q.clone() - alpha_broadcast.mul(&next_log_prob)?)?
                 )?
         )?;
@@ -644,6 +694,7 @@ impl RLAgent for SACAgent {
         let (q1_new, q2_new) = self.critic.forward(&states, &sampled_action_discrete, &sampled_action_continuous)?;
         let q_new = q1_new.minimum(&q2_new)?;
 
+        // Broadcast alpha for actor loss
         let alpha_broadcast = alpha.broadcast_as(log_prob.shape())?;
         let actor_loss = (alpha_broadcast.mul(&log_prob)? - q_new)?.mean_all()?;
 
@@ -652,9 +703,16 @@ impl RLAgent for SACAgent {
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         // Update temperature (alpha)
-        let alpha_loss = (self.log_alpha.as_tensor().neg()? *
-            (log_prob.clone() + Tensor::new(&[self.target_entropy], &self.device)?)?.detach())?
-            .mean_all()?;
+        // Broadcast target_entropy to match log_prob shape
+        let target_entropy_tensor = Tensor::new(
+            vec![self.target_entropy; batch_size],
+            &self.device
+        )?;
+
+        let alpha_loss = (
+            self.log_alpha.as_tensor().neg()? *
+                (log_prob.clone() + target_entropy_tensor)?.detach()
+        )?.mean_all()?;
 
         let alpha_grads = alpha_loss.backward()?;
         self.alpha_optimizer.step(&alpha_grads)

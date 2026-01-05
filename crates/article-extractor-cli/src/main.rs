@@ -111,7 +111,7 @@ enum Commands {
         #[arg(long, default_value = "1000")]
         plot_every: usize,
 
-        /// Performance mode: "default", "fast", "gpu", "rtx3080"
+        /// Performance mode: "default", "fast", "gpu"
         #[arg(long, default_value = "default")]
         perf_mode: String,
 
@@ -142,6 +142,14 @@ enum Commands {
         /// MLflow tracking URI
         #[arg(long)]
         mlflow_uri: Option<String>,
+
+        /// Custom model output directory (default: ./models)
+        #[arg(long)]
+        models_dir: Option<PathBuf>,
+
+        /// Custom output directory for plots and results (default: ./output)
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
     },
 
     /// Run TPE hyperparameter search
@@ -321,7 +329,9 @@ async fn main() -> Result<()> {
     })?;
 
     // Print device info
-    article_extractor::print_device_info();
+    let device = article_extractor::get_device();
+    let device_info_str = article_extractor::get_device_info(&device);
+    info!("{device_info_str}");
 
     match cli.command {
         Commands::Extract { html_file, algorithm, url, model, site_profile, output } => {
@@ -333,12 +343,12 @@ async fn main() -> Result<()> {
         Commands::Train {
             data_dir, algorithm, episodes, improved, auto_hyperparams, hyperparams, plot_every,
             perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
-            metrics_window, mlflow, mlflow_uri
+            metrics_window, mlflow, mlflow_uri, models_dir, output_dir  // ADDED
         } => {
             train_command(
                 data_dir, algorithm, episodes, improved, auto_hyperparams, hyperparams, plot_every,
                 perf_mode, max_samples, batch_size, train_freq, train_steps_per_episode,
-                metrics_window, mlflow, mlflow_uri
+                metrics_window, mlflow, mlflow_uri, models_dir, output_dir  // ADDED
             ).await?;
         }
         Commands::Tune { data_dir,
@@ -470,6 +480,8 @@ async fn train_command(
     metrics_window_override: Option<usize>,
     mlflow: bool,
     _mlflow_uri: Option<String>,
+    models_dir: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
 ) -> Result<()> {
     info!("{}", separator());
     info!("TRAINING MODE");
@@ -496,8 +508,18 @@ async fn train_command(
     // Parse algorithm
     let algorithm: AlgorithmType = algorithm.parse()
         .map_err(|e: String| article_extractor::ExtractionError::ParseError(e))?;
-    info!("Using algorithm: {}", algorithm);
     config.algorithm = algorithm;
+
+    // Apply custom directories if provided
+    if let Some(ref custom_models_dir) = models_dir {
+        config.models_dir = custom_models_dir.clone();
+        info!("Custom models directory: {}", custom_models_dir.display());
+    }
+
+    if let Some(ref custom_output_dir) = output_dir {
+        config.output_dir = custom_output_dir.clone();
+        info!("Custom output directory: {}", custom_output_dir.display());
+    }
 
     // Apply episode count and max samples
     config.num_episodes = episodes;
@@ -508,28 +530,47 @@ async fn train_command(
 
     // Load hyperparameters if specified
     let hyperparams_loaded = if auto_hyperparams {
-        let best_hyperparams_path = config.models_dir.join("best_hyperparams.json");
-        if best_hyperparams_path.exists() {
-            info!("Loading best hyperparameters from: {}", best_hyperparams_path.display());
-            if let Ok(params) = Hyperparameters::load(&best_hyperparams_path) {
-                params.apply_to_config(&mut config);
-                info!("Applied hyperparameters: lr={:.6}, batch={}, gamma={:.3}",
-                      params.learning_rate, params.batch_size, params.gamma);
-                true
-            } else {
-                false
+        // FIXED: Try algorithm-specific file first
+        let algo_specific_path = config.models_dir.join(format!(
+            "best_hyperparams_{}.json",
+            algorithm.to_string().to_lowercase()
+        ));
+
+        if algo_specific_path.exists() {
+            info!("📂 Found algorithm-specific hyperparameters");
+            match Hyperparameters::load_for_algorithm(&config.models_dir, algorithm) {
+                Ok(params) => {
+                    params.apply_to_config(&mut config);
+                    true
+                }
+                Err(e) => {
+                    warn!("Failed to load hyperparameters: {}", e);
+                    false
+                }
             }
         } else {
+            info!("⚠ No hyperparameters file found for {}", algorithm);
+            info!("  Expected: {}", algo_specific_path.display());
+            info!("  Run tuning first: cargo run -- tune --algorithm {}",
+                  algorithm.to_string().to_lowercase());
             false
         }
     } else if let Some(ref path) = hyperparams {
-        info!("Loading hyperparameters from: {}", path.display());
+        info!("📂 Loading custom hyperparameters from: {}", path.display());
         let params = Hyperparameters::load(path)?;
+
+        info!("  Settings:");
+        info!("    learning_rate: {:.6}", params.learning_rate);
+        info!("    batch_size: {}", params.batch_size);
+        info!("    gamma: {:.3}", params.gamma);
+        info!("    epsilon_decay: {:.6}", params.epsilon_decay);
+        info!("    priority_alpha: {:.3}", params.priority_alpha);
+        info!("    priority_beta: {:.3}", params.priority_beta);
+
         params.apply_to_config(&mut config);
-        info!("Applied hyperparameters: lr={:.6}, batch={}, gamma={:.3}",
-              params.learning_rate, params.batch_size, params.gamma);
         true
     } else {
+        info!("📋 Using default hyperparameters");
         false
     };
 
@@ -544,7 +585,7 @@ async fn train_command(
             "gpu" | "fast" => 1024,
             _ => config.batch_size,
         };
-        if config.batch_size > 4096 || config.batch_size < 256 {
+        if config.batch_size > 8192 || config.batch_size < 256 {
             warn!("Hyperparams batch size {} seems wrong for perf_mode={}, using {}",
                   config.batch_size, perf_mode, optimized_batch);
             config.batch_size = optimized_batch;
@@ -662,7 +703,10 @@ async fn train_command(
     info!("Episodes per second: {:.2}", episodes as f64 / duration.as_secs_f64());
     info!("Best avg quality: {:.4}", metrics.best_avg_quality);
     info!("Final reward: {:.4}", metrics.episode_rewards.last().copied().unwrap_or(0.0));
-    info!("Model saved at: {}", config.models_dir.join("best_model.onnx").display());
+    info!("Best model saved at: {}",
+          config.models_dir.join(format!("best_model_{}.onnx", algorithm.to_string().to_lowercase())).display());
+    info!("Final model saved at: {}",
+          config.models_dir.join(format!("final_model_{}.onnx", algorithm.to_string().to_lowercase())).display());
     info!("Plot saved at: {}", plot_path.display());
     info!("{}", separator());
 
@@ -677,9 +721,9 @@ async fn tune_command(
     output_dir: Option<PathBuf>,
     max_samples: usize,
     use_cpu: bool,
-    algorithm: String,  // NEW parameter
-    parallel: bool,     // NEW parameter
-    n_workers: usize,   // NEW parameter
+    algorithm: String,
+    parallel: bool,
+    n_workers: usize,
 ) -> Result<()> {
     use article_extractor::{TPEOptimizer, HyperparameterSpace, Hyperparameters};
     info!("{}", separator());
@@ -699,7 +743,7 @@ async fn tune_command(
 
     let mut config = Config::default();
     config.algorithm = algo;
-    config.use_cpu_for_tuning = use_cpu || parallel;  // Force CPU for parallel
+    config.use_cpu_for_tuning = use_cpu || parallel;
 
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
     std::fs::create_dir_all(&output_dir)?;
@@ -815,14 +859,24 @@ async fn tune_command(
 
         pb.finish_with_message("Tuning complete");
     }
+
     // Save results
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let results_path = output_dir.join(format!("tuning_results_{}_{}.json", algo, timestamp));
+
+    // Save with algorithm-specific filename
+    let results_path = output_dir.join(format!(
+        "tuning_results_{}_{}.json",
+        algo.to_string().to_lowercase(),
+        timestamp
+    ));
     optimizer.save_results(&results_path)?;
 
-    // Save the best hyperparameters with their algorithm tag
+    // Save best hyperparameters with algorithm suffix
     if let Some(best) = optimizer.get_best() {
-        let best_path = config.models_dir.join(format!("best_hyperparams_{}.json", algo));
+        let best_path = config.models_dir.join(format!(
+            "best_hyperparams_{}.json",
+            algo.to_string().to_lowercase()
+        ));
         best.save(&best_path)?;
 
         info!("{}", separator());

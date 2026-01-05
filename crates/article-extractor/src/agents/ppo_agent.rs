@@ -8,35 +8,34 @@ use crate::replay_buffer::{PrioritizedReplayBuffer};
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
 use rand::Rng;
 use rand_distr::{Normal, Distribution};
-use tracing::{error, info, warn};
+use tracing::{error};
 use std::path::{Path, PathBuf};
 use crate::models::ModelMetadata;
 use std::collections::HashMap;
 
 
-/// Actor-Critic network for PPO
-pub struct ActorCriticNetwork {
-    // Shared feature encoder
-    fc1: Linear,
-    ln1: LayerNorm,
-    fc2: Linear,
-    ln2: LayerNorm,
-    fc3: Linear,
-    ln3: LayerNorm,
-    // Actor head (policy)
-    actor_discrete: Linear,
-    actor_param_mean: Linear,
-    actor_param_logstd: Var,  // Learnable log std
-
-    // Critic head (value function)
-    critic_fc1: Linear,
-    critic_fc2: Linear,
-
-    device: Device,
-    num_actions: usize,
-    num_params: usize,
+// Helper functions
+fn sample_categorical(probs: &[f32]) -> usize {
+    let mut rng = rand::rng();
+    let random_val: f32 = rng.random();
+    let mut cumsum = 0.0;
+    for (i, &prob) in probs.iter().enumerate() {
+        cumsum += prob;
+        if random_val < cumsum {
+            return i;
+        }
+    }
+    probs.len() - 1
 }
-
+fn sample_gaussian(means: &[f32], stds: &[f32]) -> Vec<f32> {
+    let mut rng = rand::rng();
+    means.iter().zip(stds.iter())
+        .map(|(&mean, &std)| {
+            let normal = Normal::new(mean, std).unwrap_or_else(|_| Normal::new(0.0, 1.0).unwrap());
+            normal.sample(&mut rng)
+        })
+        .collect()
+}
 
 // Use helper functions that take tensors as parameter to avoid borrow conflicts
 fn save_linear_helper(
@@ -86,6 +85,30 @@ fn save_layernorm_helper(
     }
     Ok(())
 }
+
+/// Actor-Critic network for PPO
+pub struct ActorCriticNetwork {
+    // Shared feature encoder
+    fc1: Linear,
+    ln1: LayerNorm,
+    fc2: Linear,
+    ln2: LayerNorm,
+    fc3: Linear,
+    ln3: LayerNorm,
+    // Actor head (policy)
+    actor_discrete: Linear,
+    actor_param_mean: Linear,
+    actor_param_logstd: Var,  // Learnable log std
+
+    // Critic head (value function)
+    critic_fc1: Linear,
+    critic_fc2: Linear,
+
+    device: Device,
+    num_actions: usize,
+    num_params: usize,
+}
+
 
 impl ActorCriticNetwork {
 
@@ -454,14 +477,26 @@ impl PPOAgent {
         std: &Tensor,
         actions: &Tensor,
     ) -> candle_core::error::Result<Tensor> {
+        // Get dimensions
+        let batch_size = mean.dims()[0];
+        let num_params = mean.dims()[1];
+
+        // Broadcast std to match mean shape
+        // std is [num_params], need [batch_size, num_params]
         let std_broadcast = std.unsqueeze(0)?.broadcast_as(mean.shape())?;
         let variance = std_broadcast.sqr()?;
         let diff = (actions - mean)?;
 
+        // Create pi constant with proper shape [batch_size, num_params]
+        let pi_constant = Tensor::new(
+            vec![2.0 * std::f32::consts::PI; batch_size * num_params],
+            mean.device()
+        )?.reshape(&[batch_size, num_params])?;
+
         let log_prob = -0.5 * (
             diff.sqr()?.div(&variance)? +
                 variance.log()? +
-                Tensor::new(&[2.0 * std::f32::consts::PI], mean.device())?.log()?
+                pi_constant.log()?
         )?;
 
         log_prob?.sum(1)
@@ -478,10 +513,14 @@ impl PPOAgent {
         let discrete_entropy = -1.0 * (probs * log_probs)?.sum(1)?.mean_all()?;
 
         // Continuous entropy (Gaussian)
-        let continuous_entropy = (
-            std.log()? +
-                Tensor::new(&[0.5 * (1.0 + 2.0 * std::f32::consts::PI).ln()], std.device())?
-        )?.mean_all()?;
+        // std is [num_params], create constant with same shape
+        let num_params = std.dims()[0];
+        let constant = Tensor::new(
+            vec![0.5 * (1.0 + 2.0 * std::f32::consts::PI).ln(); num_params],
+            std.device()
+        )?;
+
+        let continuous_entropy = (std.log()? + constant)?.mean_all()?;
 
         discrete_entropy + continuous_entropy
     }
@@ -512,10 +551,22 @@ impl PPOAgent {
         // PPO clipped objective
         let ratio = (log_probs.clone() - old_log_probs)?.exp()?;
 
-        // Normalize advantages
+        // FIXED: Normalize advantages with proper broadcasting
+        let batch_size = advantages.dims()[0];
+
+        // Calculate mean and std
         let adv_mean = advantages.mean_all()?;
         let adv_std = advantages.sub(&adv_mean)?.sqr()?.mean_all()?.sqrt()?;
-        let advantages_norm = ((advantages - adv_mean)? / (adv_std + 1e-8)?)?;
+
+        // Create broadcast-able tensors for mean and std
+        // mean_all() and sqrt() return scalar tensors with shape []
+        // We need to broadcast them to [batch_size]
+        let adv_mean_broadcast = adv_mean.broadcast_as(&[batch_size])?;
+        let adv_std_safe = (adv_std + 1e-8)?;
+        let adv_std_broadcast = adv_std_safe.broadcast_as(&[batch_size])?;
+
+        // Now shapes match: [batch_size] - [batch_size] / [batch_size]
+        let advantages_norm = ((advantages - adv_mean_broadcast)? / adv_std_broadcast)?;
 
         let surr1 = (ratio.clone() * advantages_norm.clone())?;
 
@@ -530,12 +581,15 @@ impl PPOAgent {
         // Entropy bonus
         let entropy = Self::calculate_entropy(&action_logits, &param_std)?;
 
-        // Total loss
-        let total_loss = (
-            policy_loss.clone() +
-                value_loss.clone().mul(&Tensor::new(&[self.value_loss_coef], value_loss.device())?)? -
-                entropy.clone().mul(&Tensor::new(&[self.entropy_coef], entropy.device())?)?
-        )?;
+        // Total loss - combine as scalars
+        let value_loss_weighted = value_loss.to_scalar::<f32>()? * self.value_loss_coef;
+        let entropy_weighted = entropy.to_scalar::<f32>()? * self.entropy_coef;
+        let policy_loss_scalar = policy_loss.to_scalar::<f32>()?;
+
+        let total_loss_scalar = policy_loss_scalar + value_loss_weighted - entropy_weighted;
+
+        // Create tensor from combined scalar for backward pass
+        let total_loss = Tensor::new(&[total_loss_scalar], policy_loss.device())?;
 
         // Backward and optimize
         let grads = total_loss.backward()
@@ -545,7 +599,7 @@ impl PPOAgent {
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         Ok((
-            policy_loss.to_scalar::<f32>()?,
+            policy_loss_scalar,
             value_loss.to_scalar::<f32>()?,
             entropy.to_scalar::<f32>()?,
         ))
@@ -613,6 +667,28 @@ impl RLAgent for PPOAgent {
         let continuous_params = sample_gaussian(&mean_vec[0], &std_vec);
 
         Ok((discrete_action, continuous_params))
+    }
+
+    fn save_with_metadata(
+        &self,
+        path: &Path,
+        training_episodes: usize,
+        hyperparameters: HashMap<String, f64>,
+    ) -> Result<()> {
+        let metadata = ModelMetadata::new(
+            300,
+            self.num_actions,
+            self.num_params,
+            AlgorithmType::PPO,
+            training_episodes,
+            hyperparameters,
+        );
+
+        self.network.save_to_file(path, metadata)
+    }
+
+    fn save(&self, path: &Path) -> Result<()> {
+        self.save_with_metadata(path, 0, std::collections::HashMap::new())
     }
 
     fn train_step(
@@ -720,28 +796,6 @@ impl RLAgent for PPOAgent {
         self.step_count
     }
 
-    fn save_with_metadata(
-        &self,
-        path: &Path,
-        training_episodes: usize,
-        hyperparameters: HashMap<String, f64>,
-    ) -> Result<()> {
-        let metadata = ModelMetadata::new(
-            300,
-            self.num_actions,
-            self.num_params,
-            AlgorithmType::PPO,
-            training_episodes,
-            hyperparameters,
-        );
-
-        self.network.save_to_file(path, metadata)
-    }
-
-    fn save(&self, path: &Path) -> Result<()> {
-        self.save_with_metadata(path, 0, std::collections::HashMap::new())
-    }
-
     fn algorithm_type(&self) -> AlgorithmType {
         AlgorithmType::PPO
     }
@@ -763,25 +817,19 @@ impl RLAgent for PPOAgent {
         }
     }
 }
-// Helper functions
-fn sample_categorical(probs: &[f32]) -> usize {
-    let mut rng = rand::rng();
-    let random_val: f32 = rng.random();
-    let mut cumsum = 0.0;
-    for (i, &prob) in probs.iter().enumerate() {
-        cumsum += prob;
-        if random_val < cumsum {
-            return i;
-        }
-    }
-    probs.len() - 1
+
+// ADDITIONAL HELPER: Debug tensor shapes (for development)
+// Usage in ppo_update for debugging:
+// debug_tensor_shape("advantages", advantages);
+// debug_tensor_shape("adv_mean", &adv_mean);
+// debug_tensor_shape("adv_std", &adv_std);
+
+#[cfg(debug_assertions)]
+fn debug_tensor_shape(name: &str, tensor: &Tensor) {
+    eprintln!("DEBUG: {} shape: {:?}", name, tensor.dims());
 }
-fn sample_gaussian(means: &[f32], stds: &[f32]) -> Vec<f32> {
-    let mut rng = rand::rng();
-    means.iter().zip(stds.iter())
-        .map(|(&mean, &std)| {
-            let normal = Normal::new(mean, std).unwrap_or_else(|_| Normal::new(0.0, 1.0).unwrap());
-            normal.sample(&mut rng)
-        })
-        .collect()
+
+#[cfg(not(debug_assertions))]
+fn debug_tensor_shape(_name: &str, _tensor: &Tensor) {
+    // No-op in release builds
 }

@@ -3,7 +3,7 @@
 // FILE: crates/article-extractor/src/hyperparameter_tuner.rs
 // ============================================================================
 
-use crate::{Config, Result};
+use crate::{AlgorithmType, Config, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -58,6 +58,46 @@ impl Hyperparameters {
         config.epsilon_decay = self.epsilon_decay;
         config.priority_alpha = self.priority_alpha;
         config.priority_beta = self.priority_beta;
+    }
+
+    /// Save to algorithm-specific JSON file
+    pub fn save_with_algorithm(&self, base_path: &Path, algorithm: AlgorithmType) -> Result<()> {
+        let filename = format!("best_hyperparams_{}.json", algorithm.to_string().to_lowercase());
+        let path = base_path.parent()
+            .unwrap_or(base_path)
+            .join(filename);
+
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(&path, json)?;
+
+        info!("✓ Saved {} hyperparameters to: {}", algorithm, path.display());
+        Ok(())
+    }
+
+    /// Load from algorithm-specific file
+    pub fn load_for_algorithm(base_dir: &Path, algorithm: AlgorithmType) -> Result<Self> {
+        let filename = format!("best_hyperparams_{}.json", algorithm.to_string().to_lowercase());
+        let path = base_dir.join(&filename);
+
+        if !path.exists() {
+            return Err(crate::ExtractionError::ParseError(
+                format!("Hyperparameters file not found: {}", path.display())
+            ));
+        }
+
+        let json = std::fs::read_to_string(&path)?;
+        let params:Hyperparameters = serde_json::from_str(&json)?;
+
+        info!("✓ Loaded {} hyperparameters from: {}", algorithm, path.display());
+        info!("  Settings:");
+        info!("    learning_rate: {:.6}", params.learning_rate);
+        info!("    batch_size: {}", params.batch_size);
+        info!("    gamma: {:.3}", params.gamma);
+        info!("    epsilon_decay: {:.6}", params.epsilon_decay);
+        info!("    priority_alpha: {:.3}", params.priority_alpha);
+        info!("    priority_beta: {:.3}", params.priority_beta);
+
+        Ok(params)
     }
 
     /// Save to JSON file
@@ -505,6 +545,34 @@ impl TPEOptimizer {
     /// Get number of trials completed
     pub fn num_trials(&self) -> usize {
         self.trials.len()
+    }
+
+    /// Save results with algorithm-specific filename
+    pub fn save_results_for_algorithm(&self, output_dir: &Path, algorithm: AlgorithmType) -> Result<()> {
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("tuning_results_{}_{}.json",
+                               algorithm.to_string().to_lowercase(),
+                               timestamp
+        );
+        let path = output_dir.join(filename);
+
+        let best_trial = self.get_best_trial_idx();
+
+        let results = serde_json::json!({
+            "algorithm": algorithm.to_string(),
+            "n_trials": self.trials.len(),
+            "best_quality": self.get_best().map(|h| h.quality_score).unwrap_or(0.0),
+            "best_trial_number": best_trial.map(|i| self.trials[i].trial_number),
+            "best_hyperparameters": self.get_best(),
+            "all_trials": self.trials,
+            "search_space": self.space,
+        });
+
+        let json = serde_json::to_string_pretty(&results)?;
+        std::fs::write(&path, json)?;
+
+        info!("✓ Saved {} tuning results to: {}", algorithm, path.display());
+        Ok(())
     }
 
     /// Save optimization results
