@@ -12,7 +12,7 @@ name = "content-extractor-rl"
 path = "src/main.rs"
 
 [dependencies]
-content-extractor-rl = { path = "../content-extractor-rl", default-features = false }
+content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.0", default-features = false }
 clap.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
