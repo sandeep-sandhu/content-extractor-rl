@@ -18,7 +18,7 @@ documentation = "https://docs.rs/content-extractor-rl"
 edition = "2021"
 rust-version = "1.74.0"
 license = "MIT OR Apache-2.0"
-keywords = ["article", "extraction", "html", "reinforcement-learning", "nlp"]
+keywords = ["article", "extraction", "html", "reinforcement", "nlp"]
 categories = ["text-processing", "web-programming", "science"]
 readme = "README.md"
 
