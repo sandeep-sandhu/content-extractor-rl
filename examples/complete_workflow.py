@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Production Article Extractor Workflow with TPE Hyperparameter Tuning
+Production Content Extractor RL Workflow with TPE Hyperparameter Tuning
 ====================================================================
 
 Features:
@@ -24,7 +24,7 @@ import numpy as np
 from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 from pathlib import Path
-from article_extractor_rs import RustArticleExtractor
+from content_extractor_rl_rs import RustArticleExtractor
 
 # Try to import optuna for TPE
 try:
@@ -36,7 +36,7 @@ except ImportError:
 
 
 # Configuration
-DATA_DIR = Path("/var/local/sss/article_extractor")
+DATA_DIR = Path("/var/local/sss/content_extractor_rl")
 HTML_ARCHIVE_DIR = DATA_DIR / "html_archive"
 SITE_PROFILES_DIR = DATA_DIR / "site_profiles"
 MODELS_DIR = DATA_DIR / "models"
@@ -50,7 +50,7 @@ for dir_path in [SITE_PROFILES_DIR, MODELS_DIR, LOGS_DIR, OUTPUT_DIR, PLOTS_DIR]
 
 # Logging configuration
 _timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-LOG_FILE = LOGS_DIR / f'article_extractor_{_timestamp}.log'
+LOG_FILE = LOGS_DIR / f'content_extractor_rl_{_timestamp}.log'
 
 stream_handler = logging.StreamHandler(sys.stdout)
 stream_handler.setLevel(logging.INFO)
@@ -153,7 +153,7 @@ class HTMLArchiveLoader:
 def check_device_info():
     """Check and log device information."""
     try:
-        from article_extractor_rs import check_cuda_available
+        from content_extractor_rl_rs import check_cuda_available
         cuda_available = check_cuda_available()
 
         logger.info("="*80)
@@ -542,7 +542,7 @@ def extract_batch(html_loader: HTMLArchiveLoader, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Article Extractor - Training and Extraction Workflow',
+        description='Content Extractor RL - Training and Extraction Workflow',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )

@@ -1,0 +1,26 @@
+# crates/content-extractor-rl-py/Cargo.toml
+
+[package]
+name = "content-extractor-rl-py"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "content_extractor_rl_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+content-extractor-rl = { path = "../content-extractor-rl", default-features = false }
+pyo3.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+url = "2.5.7"
+
+[build-dependencies]
+pyo3-build-config = "0.21"
+
+[features]
+default = []
+cuda = ["content-extractor-rl/cuda"]

@@ -1,0 +1,2 @@
+[build]
+target-dir = "/var/local/sss/build_content_extractor_rl_py"

@@ -60,7 +60,7 @@ def generate_html_report(criterion_results, memory_results, output_path):
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Article Extractor - Benchmark Report</title>
+    <title>Content Extractor RL - Benchmark Report</title>
     <style>
         body {{
             font-family: Arial, sans-serif;
@@ -115,7 +115,7 @@ def generate_html_report(criterion_results, memory_results, output_path):
 </head>
 <body>
     <div class="header">
-        <h1>Article Extractor - Performance Benchmark Report</h1>
+        <h1>Content Extractor RL - Performance Benchmark Report</h1>
         <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
     </div>
     
@@ -185,7 +185,7 @@ def generate_html_report(criterion_results, memory_results, output_path):
             </div>
             
             <div class="footer">
-                <p>Article Extractor - RL-based HTML Article Extraction</p>
+                <p>Content Extractor RL - RL-based HTML Article Extraction</p>
             </div>
             </body>
             </html>

@@ -2,25 +2,24 @@
 
 [workspace]
 members = [
-    "crates/article-extractor",
-    "crates/article-extractor-cli",
-    "crates/article-extractor-py",
+    "crates/content-extractor-rl",
+    "crates/content-extractor-rl-cli",
+    "crates/content-extractor-rl-py",
 ]
 resolver = "2"
 
 [workspace.package]
-name = "article-extractor"
-description = "RL-based article extraction from HTML with baseline heuristics"
+description = "RL-based article extraction from HTML using Deep Q-Networks and heuristic fallback"
 version = "0.1.0"
 authors = ["Sandeep Singh Sandhu <sandeep.sandhu@gmx.com>"]
-repository = "https://github.com/sandeepsandhu/article-extractor"
-homepage = "https://github.com/sandeepsandhu/article-extractor"
-documentation = "https://docs.rs/article-extractor"
+repository = "https://github.com/sandeepsandhu/content-extractor-rl"
+homepage = "https://github.com/sandeepsandhu/content-extractor-rl"
+documentation = "https://docs.rs/content-extractor-rl"
 edition = "2021"
-rust-version = "1.91.0"
+rust-version = "1.74.0"
 license = "MIT OR Apache-2.0"
-keywords = ["article", "extraction", "html", "machine-learning", "nlp"]
-categories = ["text-processing", "web-programming"]
+keywords = ["article", "extraction", "html", "reinforcement-learning", "nlp"]
+categories = ["text-processing", "web-programming", "science"]
 readme = "README.md"
 
 [workspace.dependencies]
@@ -63,8 +62,6 @@ bzip2 = "0.6.1"
 rand = { version = "0.10.0-rc.5", features = ["small_rng"] }
 rand_distr = "0.6.0-rc.0"
 
-[workspace.dev-dependencies]
-tempfile = "3.24.0"
 
 # ============================================================================
 # Build Instructions
@@ -74,11 +71,11 @@ tempfile = "3.24.0"
 # cargo build --release --features cuda,mlflow
 
 # Build CLI only:
-# cd crates/article-extractor-cli
+# cd crates/content-extractor-rl-cli
 # cargo build --release --features cuda,mlflow
 
 # Build Python package:
-# cd crates/article-extractor-py
+# cd crates/content-extractor-rl-py
 # maturin develop --release --features cuda
 
 # Run tests:

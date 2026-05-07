@@ -1,17 +1,17 @@
-# Article Extractor - Complete Usage Guide
+# Content Extractor RL - Complete Usage Guide
 
 ## Installation
 
 ### Option 1: Install from PyPI (when published)
 ```bash
-pip install article-extractor
+pip install content-extractor-rl
 ```
 
 ### Option 2: Build from Source
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/article-extractor
-cd article-extractor
+git clone https://github.com/yourusername/content-extractor-rl
+cd content-extractor-rl
 
 # Build and install
 ./scripts/install_python.sh
@@ -21,7 +21,7 @@ cd article-extractor
 
 ### Python API
 ```python
-from article_extractor import RustArticleExtractor
+from content_extractor_rl import RustArticleExtractor
 
 # Initialize with trained model
 extractor = RustArticleExtractor(
@@ -41,20 +41,20 @@ print(result['content'])
 ### Command Line
 ```bash
 # Extract article
-article-extractor extract \
+content-extractor-rl extract \
     --html-file article.html \
     --url https://example.com/article \
     --model model.onnx \
     --output result.json
 
 # Train model
-article-extractor train \
+content-extractor-rl train \
     --data-dir ./training_data \
     --episodes 10000 \
     --improved
 
 # Hyperparameter search
-article-extractor search \
+content-extractor-rl search \
     --data-dir ./training_data \
     --episodes-per-trial 500
 ```
@@ -74,7 +74,7 @@ training_data/
 ### Train with Python
 
 ```python
-from article_extractor import RustArticleExtractor
+from content_extractor_rl import RustArticleExtractor
 
 # Load samples
 html_samples = [
@@ -146,7 +146,7 @@ cargo build --release --features onnx
 
 ```python
 # If you get import errors, rebuild:
-cd crates/article-extractor-py
+cd crates/content-extractor-rl-py
 maturin develop --release
 ```
 
@@ -180,7 +180,7 @@ See examples/ directory for complete examples:
 See Python docstrings:
 
 ```python
-from article_extractor import RustArticleExtractor
+from content_extractor_rl import RustArticleExtractor
 help(RustArticleExtractor)
 ```
 

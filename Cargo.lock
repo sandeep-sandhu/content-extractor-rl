@@ -161,76 +161,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "article-extractor"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bzip2",
- "candle-core",
- "candle-nn",
- "chrono",
- "criterion",
- "futures",
- "html5ever",
- "indicatif",
- "lazy_static",
- "ndarray 0.17.1",
- "plotters",
- "rand 0.10.0-rc.5",
- "rand_distr 0.6.0-rc.0",
- "rayon",
- "regex",
- "safetensors 0.7.0",
- "scraper",
- "selectors",
- "serde",
- "serde_json",
- "sha2 0.11.0-rc.3",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
- "tract-core",
- "tract-onnx",
- "trs-mlflow",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "article-extractor-cli"
-version = "0.1.0"
-dependencies = [
- "algorithm",
- "anyhow",
- "article-extractor",
- "bzip2",
- "chrono",
- "clap",
- "indicatif",
- "rand 0.10.0-rc.5",
- "rayon",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
-name = "article-extractor-py"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "article-extractor",
- "pyo3",
- "pyo3-build-config 0.21.2",
- "serde_json",
- "url",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -580,6 +510,76 @@ name = "const-oid"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dabb6555f92fb9ee4140454eb5dcd14c7960e1225c6d1a6cc361f032947713e"
+
+[[package]]
+name = "content-extractor-rl"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bzip2",
+ "candle-core",
+ "candle-nn",
+ "chrono",
+ "criterion",
+ "futures",
+ "html5ever",
+ "indicatif",
+ "lazy_static",
+ "ndarray 0.17.1",
+ "plotters",
+ "rand 0.10.0-rc.5",
+ "rand_distr 0.6.0-rc.0",
+ "rayon",
+ "regex",
+ "safetensors 0.7.0",
+ "scraper",
+ "selectors",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0-rc.3",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "tract-core",
+ "tract-onnx",
+ "trs-mlflow",
+ "url",
+ "walkdir",
+]
+
+[[package]]
+name = "content-extractor-rl-cli"
+version = "0.1.0"
+dependencies = [
+ "algorithm",
+ "anyhow",
+ "bzip2",
+ "chrono",
+ "clap",
+ "content-extractor-rl",
+ "indicatif",
+ "rand 0.10.0-rc.5",
+ "rayon",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
+name = "content-extractor-rl-py"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "content-extractor-rl",
+ "pyo3",
+ "pyo3-build-config 0.21.2",
+ "serde_json",
+ "url",
+]
 
 [[package]]
 name = "core-foundation"
