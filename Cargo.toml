@@ -10,7 +10,7 @@ resolver = "2"
 
 [workspace.package]
 description = "RL-based article extraction from HTML using Deep Q-Networks and heuristic fallback"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Sandeep Singh Sandhu <sandeep.sandhu@gmx.com>"]
 repository = "https://github.com/sandeepsandhu/content-extractor-rl"
 homepage = "https://github.com/sandeepsandhu/content-extractor-rl"
