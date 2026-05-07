@@ -32,11 +32,11 @@ impl HtmlParser {
 
             // Get position among siblings
             let position = elem.prev_siblings()
-                .filter(|s| s.value().as_element().map_or(false, |e| e.name() == tag))
+                .filter(|s| s.value().as_element().is_some_and(|e| e.name() == tag))
                 .count() + 1;
 
             path.push(format!("{}[{}]", tag, position));
-            current = elem.parent().and_then(|p| ElementRef::wrap(p));
+            current = elem.parent().and_then(ElementRef::wrap);
         }
 
         path.reverse();

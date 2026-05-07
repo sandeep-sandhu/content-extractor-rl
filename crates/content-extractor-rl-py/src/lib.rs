@@ -25,8 +25,6 @@ struct RustArticleExtractor {
 #[pymethods]
 impl RustArticleExtractor {
     /// Create new extractor
-
-    /// Create new extractor
     ///
     /// Args:
     ///     site_profile: Path to site profile JSON file (optional)

@@ -60,7 +60,7 @@ impl GroundTruthData {
 
     /// Get the publication date (handles both variants)
     pub fn get_pubdate(&self) -> Option<&str> {
-        self.pubdate.as_deref().or_else(|| self.pub_date.as_deref())
+        self.pubdate.as_deref().or(self.pub_date.as_deref())
     }
 
     /// Get the URL

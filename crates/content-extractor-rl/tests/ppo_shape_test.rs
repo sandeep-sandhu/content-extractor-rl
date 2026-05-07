@@ -151,7 +151,7 @@ fn calculate_entropy_helper(
     // Continuous entropy
     let num_params = std.dims()[0];
     let constant = candle_core::Tensor::new(
-        vec![0.5 * (1.0 + 2.0 * std::f32::consts::PI).ln(); num_params],
+        vec![0.5_f64 * (1.0_f64 + 2.0_f64 * std::f64::consts::PI).ln(); num_params],
         std.device()
     )?;
 

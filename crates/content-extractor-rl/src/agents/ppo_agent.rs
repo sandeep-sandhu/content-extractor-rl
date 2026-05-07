@@ -8,7 +8,6 @@ use crate::replay_buffer::{PrioritizedReplayBuffer};
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
 use rand::Rng;
 use rand_distr::{Normal, Distribution};
-use tracing::{error};
 use std::path::{Path, PathBuf};
 use crate::models::ModelMetadata;
 use std::collections::HashMap;
@@ -87,6 +86,7 @@ fn save_layernorm_helper(
 }
 
 /// Actor-Critic network for PPO
+#[allow(dead_code)]
 pub struct ActorCriticNetwork {
     // Shared feature encoder
     fc1: Linear,
@@ -279,6 +279,9 @@ impl ActorCriticNetwork {
         let mut metadata_len_bytes = [0u8; 8];
         file.read_exact(&mut metadata_len_bytes)?;
         let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
+        if metadata_len > 10 * 1024 * 1024 {
+            return Err(crate::ExtractionError::ParseError(format!("Invalid model file: metadata length {} is too large", metadata_len)));
+        }
 
         let mut metadata_bytes = vec![0u8; metadata_len];
         file.read_exact(&mut metadata_bytes)?;
@@ -336,19 +339,21 @@ impl ActorCriticNetwork {
 
         tracing::info!("Loaded {} tensors, reconstructing model...", tensors.len());
 
-        // FIXED: Make varmap mutable
+        // Create network first to populate varmap with correct keys, then overwrite with loaded values
         let mut varmap = VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
+        let mut network = ActorCriticNetwork::new(state_dim, num_actions, num_params, vb)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         for (name, tensor) in tensors.iter() {
-            let var = Var::from_tensor(tensor)
-                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-            varmap.set_one(name, var.as_tensor())
-                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+            if name == "actor_param_logstd" {
+                network.actor_param_logstd = Var::from_tensor(tensor)
+                    .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+            } else {
+                varmap.set_one(name, tensor)
+                    .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+            }
         }
-
-        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
-        let network = ActorCriticNetwork::new(state_dim, num_actions, num_params, vb)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         Ok((network, varmap))
     }
@@ -365,6 +370,7 @@ impl ActorCriticNetwork {
     }
 
     /// Save to SafeTensors format
+    #[allow(dead_code)]
     pub(crate) fn save_to_safetensors(&self, path: &PathBuf) -> Result<()> {
         use safetensors::tensor::{Dtype, TensorView};
         use std::collections::HashMap;
@@ -390,54 +396,54 @@ impl ActorCriticNetwork {
         // Save all network components
         collect_tensor("fc1.weight", self.fc1.weight())?;
         if let Some(bias) = self.fc1.bias() {
-            collect_tensor("fc1.bias", &bias)?;
+            collect_tensor("fc1.bias", bias)?;
         }
 
         collect_tensor("ln1.weight", self.ln1.weight())?;
         if let Some(bias) = self.ln1.bias() {
-            collect_tensor("ln1.bias", &bias)?;
+            collect_tensor("ln1.bias", bias)?;
         }
 
         collect_tensor("fc2.weight", self.fc2.weight())?;
         if let Some(bias) = self.fc2.bias() {
-            collect_tensor("fc2.bias", &bias)?;
+            collect_tensor("fc2.bias", bias)?;
         }
 
         collect_tensor("ln2.weight", self.ln2.weight())?;
         if let Some(bias) = self.ln2.bias() {
-            collect_tensor("ln2.bias", &bias)?;
+            collect_tensor("ln2.bias", bias)?;
         }
 
         collect_tensor("fc3.weight", self.fc3.weight())?;
         if let Some(bias) = self.fc3.bias() {
-            collect_tensor("fc3.bias", &bias)?;
+            collect_tensor("fc3.bias", bias)?;
         }
 
         collect_tensor("ln3.weight", self.ln3.weight())?;
         if let Some(bias) = self.ln3.bias() {
-            collect_tensor("ln3.bias", &bias)?;
+            collect_tensor("ln3.bias", bias)?;
         }
 
         collect_tensor("actor_discrete.weight", self.actor_discrete.weight())?;
         if let Some(bias) = self.actor_discrete.bias() {
-            collect_tensor("actor_discrete.bias", &bias)?;
+            collect_tensor("actor_discrete.bias", bias)?;
         }
 
         collect_tensor("actor_param_mean.weight", self.actor_param_mean.weight())?;
         if let Some(bias) = self.actor_param_mean.bias() {
-            collect_tensor("actor_param_mean.bias", &bias)?;
+            collect_tensor("actor_param_mean.bias", bias)?;
         }
 
         collect_tensor("actor_param_logstd", self.actor_param_logstd.as_tensor())?;
 
         collect_tensor("critic_fc1.weight", self.critic_fc1.weight())?;
         if let Some(bias) = self.critic_fc1.bias() {
-            collect_tensor("critic_fc1.bias", &bias)?;
+            collect_tensor("critic_fc1.bias", bias)?;
         }
 
         collect_tensor("critic_fc2.weight", self.critic_fc2.weight())?;
         if let Some(bias) = self.critic_fc2.bias() {
-            collect_tensor("critic_fc2.bias", &bias)?;
+            collect_tensor("critic_fc2.bias", bias)?;
         }
 
         // Convert to SafeTensors format
@@ -461,6 +467,7 @@ impl ActorCriticNetwork {
     }
 
     /// Save to ONNX format with metadata
+    #[allow(dead_code)]
     pub(crate) fn save_to_onnx_with_metadata(&self, path: &Path, metadata: ModelMetadata) -> Result<()> {
         self.save_to_file(path, metadata)
     }
@@ -471,6 +478,7 @@ impl ActorCriticNetwork {
 pub struct PPOAgent {
     network: ActorCriticNetwork,
     optimizer: AdamW,
+    #[allow(dead_code)]
     varmap: VarMap,
     // PPO hyperparameters
     clip_epsilon: f32,
@@ -559,7 +567,7 @@ impl PPOAgent {
         logits: &Tensor,
         actions: &Tensor,
     ) -> candle_core::error::Result<Tensor> {
-        let log_probs = candle_nn::ops::log_softmax(&logits, 1)?;
+        let log_probs = candle_nn::ops::log_softmax(logits, 1)?;
         log_probs.gather(&actions.unsqueeze(1)?, 1)?.squeeze(1)
     }
 
@@ -600,8 +608,8 @@ impl PPOAgent {
         std: &Tensor,
     ) -> candle_core::error::Result<Tensor> {
         // Discrete entropy
-        let probs = candle_nn::ops::softmax(&logits, 1)?;
-        let log_probs = candle_nn::ops::log_softmax(&logits, 1)?;
+        let probs = candle_nn::ops::softmax(logits, 1)?;
+        let log_probs = candle_nn::ops::log_softmax(logits, 1)?;
         let discrete_entropy = -1.0 * (probs * log_probs)?.sum(1)?.mean_all()?;
 
         // Continuous entropy (Gaussian)
@@ -915,6 +923,7 @@ impl RLAgent for PPOAgent {
 // debug_tensor_shape("adv_std", &adv_std);
 
 #[cfg(debug_assertions)]
+#[allow(dead_code)]
 fn debug_tensor_shape(name: &str, tensor: &Tensor) {
     eprintln!("DEBUG: {} shape: {:?}", name, tensor.dims());
 }

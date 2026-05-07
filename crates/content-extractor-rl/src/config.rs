@@ -144,9 +144,7 @@ impl Default for Config {
 impl Config {
     /// Create config with specific algorithm
     pub fn with_algorithm(algorithm: AlgorithmType) -> Self {
-        let mut config = Self::default();
-        config.algorithm = algorithm;
-        config
+        Self { algorithm, ..Self::default() }
     }
 
     /// PPO recommended configuration
@@ -172,24 +170,20 @@ impl Config {
 
     /// Create high-performance GPU config
     pub fn gpu_optimized() -> Self {
-        let mut config = Self::default();
-
-        // GPU-specific optimizations
-        config.batch_size = 6144;                    // Much larger batches
-        config.num_train_steps_per_episode = 32;    // Many gradient updates
-        config.train_freq = 1;                       // Train every step
-        config.replay_buffer_size = 500000;          // Larger buffer
-        config.min_replay_size = 20000;              // More warmup
-        config.max_html_samples = 10000;             // Larger dataset
-        config.sample_batch_load_size = 2000;
-
-        // Aggressive learning
-        config.learning_rate = 0.00183;                 // Higher LR
-        config.target_update_freq = 100;             // Frequent updates
-        config.metrics_window = 50;
-        config.checkpoint_freq = 250;
-
-        config
+        Self {
+            batch_size: 6144,
+            num_train_steps_per_episode: 32,
+            train_freq: 1,
+            replay_buffer_size: 500000,
+            min_replay_size: 20000,
+            max_html_samples: 10000,
+            sample_batch_load_size: 2000,
+            learning_rate: 0.00183,
+            target_update_freq: 100,
+            metrics_window: 50,
+            checkpoint_freq: 250,
+            ..Self::default()
+        }
     }
 
     /// Create config from environment variables

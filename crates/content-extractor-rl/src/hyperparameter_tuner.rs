@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use rand::Rng;
-use tracing::{info, debug, warn};
+use tracing::{info, warn};
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
 use crate::models::NetworkConfig;
@@ -353,24 +353,20 @@ impl TPEOptimizer {
     pub fn random_suggest(&self, rng: &mut impl Rng) -> Hyperparameters {
         // Sample random network architecture
         let hidden_layers = self.space.hidden_layer_sizes
-            .iter()
-            .nth(rng.random_range(0..self.space.hidden_layer_sizes.len()))
+            .get(rng.random_range(0..self.space.hidden_layer_sizes.len()))
             .unwrap()
             .clone();
 
         let value_hidden = *self.space.value_hidden
-            .iter()
-            .nth(rng.random_range(0..self.space.value_hidden.len()))
+            .get(rng.random_range(0..self.space.value_hidden.len()))
             .unwrap();
 
         let advantage_hidden = *self.space.advantage_hidden
-            .iter()
-            .nth(rng.random_range(0..self.space.advantage_hidden.len()))
+            .get(rng.random_range(0..self.space.advantage_hidden.len()))
             .unwrap();
 
         let use_layer_norm = *self.space.use_layer_norm
-            .iter()
-            .nth(rng.random_range(0..self.space.use_layer_norm.len()))
+            .get(rng.random_range(0..self.space.use_layer_norm.len()))
             .unwrap();
 
         let dropout = rng.random_range(self.space.dropout.0..self.space.dropout.1);
@@ -378,8 +374,7 @@ impl TPEOptimizer {
         Hyperparameters {
             learning_rate: rng.random_range(self.space.learning_rate.0..self.space.learning_rate.1),
             batch_size: *self.space.batch_size
-                .iter()
-                .nth(rng.random_range(0..self.space.batch_size.len()))
+                .get(rng.random_range(0..self.space.batch_size.len()))
                 .unwrap(),
             gamma: rng.random_range(self.space.gamma.0..self.space.gamma.1),
             epsilon_decay: rng.random_range(self.space.epsilon_decay.0..self.space.epsilon_decay.1),
@@ -401,6 +396,7 @@ impl TPEOptimizer {
     }
 
     /// Sample categorical choice (e.g., network architecture)
+    #[allow(dead_code)]
     fn sample_tpe_categorical<T: Clone>(
         &self,
         good_values: Vec<&T>,
@@ -440,6 +436,7 @@ impl TPEOptimizer {
     }
 
     /// Sample boolean parameter
+    #[allow(dead_code)]
     fn sample_tpe_boolean(
         &self,
         good_values: Vec<bool>,
@@ -456,6 +453,7 @@ impl TPEOptimizer {
         rng.random::<f64>() < probability
     }
 
+    #[allow(dead_code)]
     fn good_trials(&self) -> Vec<TrialResult> {
         let quantile = 0.25;
         let mut sorted = self.trials.clone();
@@ -464,6 +462,7 @@ impl TPEOptimizer {
         sorted[..n_good].to_vec()
     }
 
+    #[allow(dead_code)]
     fn bad_trials(&self) -> Vec<TrialResult> {
         let quantile = 0.25;
         let mut sorted = self.trials.clone();
@@ -473,6 +472,7 @@ impl TPEOptimizer {
     }
 
     /// Sample continuous parameter using TPE
+    #[allow(dead_code)]
     fn sample_tpe_continuous(
         &self,
         good_values: Vec<f64>,
@@ -501,6 +501,7 @@ impl TPEOptimizer {
     }
 
     /// Sample discrete parameter using TPE
+    #[allow(dead_code)]
     fn sample_tpe_discrete(
         &self,
         good_values: Vec<usize>,
@@ -509,7 +510,7 @@ impl TPEOptimizer {
         rng: &mut impl Rng,
     ) -> usize {
         if good_values.is_empty() {
-            return *choices.iter().nth(rng.random_range(0..choices.len())).unwrap();
+            return *choices.get(rng.random_range(0..choices.len())).unwrap();
         }
 
         // Count frequency in good trials
@@ -521,7 +522,7 @@ impl TPEOptimizer {
         // Choose based on frequency (weighted sampling)
         let total: usize = counts.values().sum();
         if total == 0 {
-            return *choices.iter().nth(rng.random_range(0..choices.len())).unwrap();
+            return *choices.get(rng.random_range(0..choices.len())).unwrap();
         }
 
         let r: f64 = rng.random::<f64>() * total as f64;
@@ -539,6 +540,7 @@ impl TPEOptimizer {
     }
 
     /// Sample from truncated normal distribution
+    #[allow(dead_code)]
     fn sample_truncated_normal(
         &self,
         mean: f64,

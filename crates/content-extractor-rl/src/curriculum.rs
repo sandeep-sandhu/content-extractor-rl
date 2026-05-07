@@ -23,7 +23,7 @@ impl CurriculumManager {
 
     /// Update difficulty threshold
     pub fn update_threshold(&mut self, episode: usize) {
-        if episode % 100 == 0 {
+        if episode.is_multiple_of(100) {
             self.current_threshold = (self.current_threshold + self.increment_rate)
                 .min(self.max_threshold);
         }

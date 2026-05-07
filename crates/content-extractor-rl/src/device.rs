@@ -4,13 +4,13 @@
 // ============================================================================
 
 use candle_core::Device;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Get best available device (CUDA if available, otherwise CPU)
 pub fn get_device() -> Device {
     // Check environment variable for forcing CPU
-    if std::env::var("ARTICLE_EXTRACTOR_FORCE_CPU").is_ok() {
-        info!("ARTICLE_EXTRACTOR_FORCE_CPU set, using CPU");
+    if std::env::var("CONTENT_EXTRACTOR_RL_FORCE_CPU").is_ok() {
+        info!("CONTENT_EXTRACTOR_RL_FORCE_CPU set, using CPU");
         return Device::Cpu;
     }
 
@@ -25,7 +25,7 @@ pub fn get_device() -> Device {
                     return device;
                 }
                 Err(e) => {
-                    warn!("CUDA available but failed to initialize: {}. Falling back to CPU", e);
+                    tracing::warn!("CUDA available but failed to initialize: {}. Falling back to CPU", e);
                 }
             }
         } else {
@@ -138,10 +138,10 @@ mod tests {
 
     #[test]
     fn test_force_cpu() {
-        std::env::set_var("ARTICLE_EXTRACTOR_FORCE_CPU", "1");
+        std::env::set_var("CONTENT_EXTRACTOR_RL_FORCE_CPU", "1");
         let device = get_device();
         assert!(matches!(device, Device::Cpu));
-        std::env::remove_var("ARTICLE_EXTRACTOR_FORCE_CPU");
+        std::env::remove_var("CONTENT_EXTRACTOR_RL_FORCE_CPU");
     }
 
     #[test]

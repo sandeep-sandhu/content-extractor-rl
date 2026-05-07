@@ -148,9 +148,7 @@ pub fn extract_batch(
             Ok(result) => {
                 let method = if agent.is_some() {
                     if has_profile { "rl+profile" } else { "rl" }
-                } else {
-                    if has_profile { "baseline+profile" } else { "baseline" }
-                };
+                } else if has_profile { "baseline+profile" } else { "baseline" };
 
                 let article = ExtractedArticle {
                     url: url.clone(),
@@ -219,13 +217,9 @@ pub fn extract_domain_from_url(url: &str) -> String {
         }
         Err(_) => {
             let url = url.trim();
-            let without_protocol = if url.starts_with("https://") {
-                &url[8..]
-            } else if url.starts_with("http://") {
-                &url[7..]
-            } else {
-                url
-            };
+            let without_protocol = url.strip_prefix("https://")
+                .or_else(|| url.strip_prefix("http://"))
+                .unwrap_or(url);
 
             let host_part = without_protocol.split('/').next().unwrap_or("");
             let domain = host_part.split(':').next().unwrap_or("");

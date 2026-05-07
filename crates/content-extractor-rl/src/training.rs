@@ -39,13 +39,9 @@ fn extract_domain_from_url(url: &str) -> String {
         Err(_) => {
             // If URL parsing fails, try to extract domain directly
             let url = url.trim();
-            let without_protocol = if url.starts_with("https://") {
-                &url[8..]
-            } else if url.starts_with("http://") {
-                &url[7..]
-            } else {
-                url
-            };
+            let without_protocol = url.strip_prefix("https://")
+                .or_else(|| url.strip_prefix("http://"))
+                .unwrap_or(url);
 
             // Split by '/' to get the host part
             let host_part = without_protocol.split('/').next().unwrap_or("");
@@ -594,7 +590,7 @@ pub fn train_with_improvements(
 
             // OPTIMIZED: More frequent training after warmup
             if replay_buffer.len() >= config.min_replay_size &&
-                global_step % config.train_freq == 0 {
+                global_step.is_multiple_of(config.train_freq) {
                 // ADDED: Robust error handling for training step
                 match agent.train_step(&mut replay_buffer, config.batch_size) {
                     Ok(loss) => {
@@ -923,7 +919,7 @@ pub fn save_training_plot(metrics: &TrainingMetrics, output_path: &Path) -> Resu
         .map_err(|e| ExtractionError::ModelError(format!("Series error: {}", e)))?;
 
     root.present().map_err(|e| crate::ExtractionError::IoError(
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+        std::io::Error::other(e.to_string())
     ))?;
 
     info!("Training plot saved to: {}", output_path.display());

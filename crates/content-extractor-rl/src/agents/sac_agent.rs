@@ -7,14 +7,14 @@ use candle_core::{Device, Tensor, DType, Var};
 use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap, Linear, Module, linear, layer_norm, LayerNorm};
 use crate::replay_buffer::PrioritizedReplayBuffer;
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
-use rand_distr::{Distribution};
-use tracing::{info, warn};
+use tracing::info;
 use std::path::Path;
 use std::collections::HashMap;
 use crate::models::ModelMetadata;
 use candle_nn::ops::softmax;
 
 /// Actor network for SAC (outputs mean and log_std)
+#[allow(dead_code)]
 pub struct SACActorNetwork {
     fc1: Linear,
     ln1: LayerNorm,
@@ -85,6 +85,7 @@ impl SACActorNetwork {
 }
 
 /// Twin Q-network for SAC
+#[allow(dead_code)]
 pub struct SACCriticNetwork {
     // Q1 network
     q1_fc1: Linear,
@@ -177,8 +178,11 @@ pub struct SACAgent {
     alpha_optimizer: AdamW,
     target_entropy: f32,
 
+    #[allow(dead_code)]
     actor_varmap: VarMap,
+    #[allow(dead_code)]
     critic_varmap: VarMap,
+    #[allow(dead_code)]
     alpha_varmap: VarMap,
 
     num_actions: usize,
@@ -242,8 +246,8 @@ fn save_layernorm_helper(
 fn soft_update_linear(
     target: &Linear,
     source: &Linear,
-    tau: f32,
-    device: &Device,
+    _tau: f32,
+    _device: &Device,
 ) -> candle_core::error::Result<()> {
     // Soft update: target = tau * source + (1 - tau) * target
     // Note: This is a conceptual implementation
@@ -263,8 +267,8 @@ fn soft_update_linear(
 fn soft_update_layernorm(
     target: &LayerNorm,
     source: &LayerNorm,
-    tau: f32,
-    device: &Device,
+    _tau: f32,
+    _device: &Device,
 ) -> candle_core::error::Result<()> {
     let _source_weight = source.weight();
     let _target_weight = target.weight();
@@ -275,6 +279,7 @@ fn soft_update_layernorm(
 }
 
 impl SACAgent {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         state_dim: usize,
         num_actions: usize,
@@ -448,11 +453,11 @@ impl SACAgent {
 
         // Since candle doesn't easily support in-place weight updates,
         // we'll do periodic hard copies instead
-        if self.step_count % 100 == 0 {
+        if self.step_count.is_multiple_of(100) {
             // This is where you'd copy weights from critic to target_critic
             // For now, we log the update
 
-            if self.step_count % 1000 == 0 {
+            if self.step_count.is_multiple_of(1000) {
                 info!("SAC target network update at step {} (tau={})", self.step_count, tau);
             }
 
@@ -574,6 +579,9 @@ impl SACAgent {
         let mut metadata_len_bytes = [0u8; 8];
         file.read_exact(&mut metadata_len_bytes)?;
         let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
+        if metadata_len > 10 * 1024 * 1024 {
+            return Err(crate::ExtractionError::ParseError(format!("Invalid model file: metadata length {} is too large", metadata_len)));
+        }
 
         let mut metadata_bytes = vec![0u8; metadata_len];
         file.read_exact(&mut metadata_bytes)?;
@@ -631,23 +639,29 @@ impl SACAgent {
 
         tracing::info!("Loaded {} tensors, reconstructing model...", tensors.len());
 
-        // Make varmaps mutable
+        // Create varmaps and populate keys by building networks first, then overwrite with loaded values
         let mut actor_varmap = VarMap::new();
+        let actor_vb = VarBuilder::from_varmap(&actor_varmap, DType::F32, device);
+        let _ = SACActorNetwork::new(state_dim, num_actions, num_params, actor_vb)
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
         let mut critic_varmap = VarMap::new();
+        let critic_vb = VarBuilder::from_varmap(&critic_varmap, DType::F32, device);
+        let _ = SACCriticNetwork::new(state_dim, num_actions, num_params, critic_vb.pp("online"))
+            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         for (name, tensor) in tensors.iter() {
-            let var = Var::from_tensor(tensor)
-                .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
             if name.starts_with("actor.") {
                 let actor_name = name.strip_prefix("actor.").unwrap();
-                actor_varmap.set_one(actor_name, var.as_tensor())
+                actor_varmap.set_one(actor_name, tensor)
                     .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
             } else if name.starts_with("critic.") {
-                let critic_name = name.strip_prefix("critic.").unwrap();
-                critic_varmap.set_one(critic_name, var.as_tensor())
+                // critic is stored under "online." prefix in the varmap
+                let critic_name = format!("online.{}", name.strip_prefix("critic.").unwrap());
+                critic_varmap.set_one(&critic_name, tensor)
                     .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
             }
+            // log_alpha is re-initialized to zero in Self::new
         }
 
         Self::new(state_dim, num_actions, num_params, 0.95, 3e-4, device, actor_varmap, critic_varmap)
@@ -690,98 +704,98 @@ impl SACAgent {
         // Save actor network
         collect_tensor("actor.fc1.weight", self.actor.fc1.weight())?;
         if let Some(bias) = self.actor.fc1.bias() {
-            collect_tensor("actor.fc1.bias", &bias)?;
+            collect_tensor("actor.fc1.bias", bias)?;
         }
 
         collect_tensor("actor.ln1.weight", self.actor.ln1.weight())?;
         if let Some(bias) = self.actor.ln1.bias() {
-            collect_tensor("actor.ln1.bias", &bias)?;
+            collect_tensor("actor.ln1.bias", bias)?;
         }
 
         collect_tensor("actor.fc2.weight", self.actor.fc2.weight())?;
         if let Some(bias) = self.actor.fc2.bias() {
-            collect_tensor("actor.fc2.bias", &bias)?;
+            collect_tensor("actor.fc2.bias", bias)?;
         }
 
         collect_tensor("actor.ln2.weight", self.actor.ln2.weight())?;
         if let Some(bias) = self.actor.ln2.bias() {
-            collect_tensor("actor.ln2.bias", &bias)?;
+            collect_tensor("actor.ln2.bias", bias)?;
         }
 
         collect_tensor("actor.fc3.weight", self.actor.fc3.weight())?;
         if let Some(bias) = self.actor.fc3.bias() {
-            collect_tensor("actor.fc3.bias", &bias)?;
+            collect_tensor("actor.fc3.bias", bias)?;
         }
 
         collect_tensor("actor.ln3.weight", self.actor.ln3.weight())?;
         if let Some(bias) = self.actor.ln3.bias() {
-            collect_tensor("actor.ln3.bias", &bias)?;
+            collect_tensor("actor.ln3.bias", bias)?;
         }
 
         collect_tensor("actor.action_logits.weight", self.actor.action_logits.weight())?;
         if let Some(bias) = self.actor.action_logits.bias() {
-            collect_tensor("actor.action_logits.bias", &bias)?;
+            collect_tensor("actor.action_logits.bias", bias)?;
         }
 
         collect_tensor("actor.param_mean.weight", self.actor.param_mean.weight())?;
         if let Some(bias) = self.actor.param_mean.bias() {
-            collect_tensor("actor.param_mean.bias", &bias)?;
+            collect_tensor("actor.param_mean.bias", bias)?;
         }
 
         collect_tensor("actor.param_logstd.weight", self.actor.param_logstd.weight())?;
         if let Some(bias) = self.actor.param_logstd.bias() {
-            collect_tensor("actor.param_logstd.bias", &bias)?;
+            collect_tensor("actor.param_logstd.bias", bias)?;
         }
 
         // Save critic network (Q1 and Q2)
         collect_tensor("critic.q1_fc1.weight", self.critic.q1_fc1.weight())?;
         if let Some(bias) = self.critic.q1_fc1.bias() {
-            collect_tensor("critic.q1_fc1.bias", &bias)?;
+            collect_tensor("critic.q1_fc1.bias", bias)?;
         }
 
         collect_tensor("critic.q1_ln1.weight", self.critic.q1_ln1.weight())?;
         if let Some(bias) = self.critic.q1_ln1.bias() {
-            collect_tensor("critic.q1_ln1.bias", &bias)?;
+            collect_tensor("critic.q1_ln1.bias", bias)?;
         }
 
         collect_tensor("critic.q1_fc2.weight", self.critic.q1_fc2.weight())?;
         if let Some(bias) = self.critic.q1_fc2.bias() {
-            collect_tensor("critic.q1_fc2.bias", &bias)?;
+            collect_tensor("critic.q1_fc2.bias", bias)?;
         }
 
         collect_tensor("critic.q1_ln2.weight", self.critic.q1_ln2.weight())?;
         if let Some(bias) = self.critic.q1_ln2.bias() {
-            collect_tensor("critic.q1_ln2.bias", &bias)?;
+            collect_tensor("critic.q1_ln2.bias", bias)?;
         }
 
         collect_tensor("critic.q1_output.weight", self.critic.q1_output.weight())?;
         if let Some(bias) = self.critic.q1_output.bias() {
-            collect_tensor("critic.q1_output.bias", &bias)?;
+            collect_tensor("critic.q1_output.bias", bias)?;
         }
 
         collect_tensor("critic.q2_fc1.weight", self.critic.q2_fc1.weight())?;
         if let Some(bias) = self.critic.q2_fc1.bias() {
-            collect_tensor("critic.q2_fc1.bias", &bias)?;
+            collect_tensor("critic.q2_fc1.bias", bias)?;
         }
 
         collect_tensor("critic.q2_ln1.weight", self.critic.q2_ln1.weight())?;
         if let Some(bias) = self.critic.q2_ln1.bias() {
-            collect_tensor("critic.q2_ln1.bias", &bias)?;
+            collect_tensor("critic.q2_ln1.bias", bias)?;
         }
 
         collect_tensor("critic.q2_fc2.weight", self.critic.q2_fc2.weight())?;
         if let Some(bias) = self.critic.q2_fc2.bias() {
-            collect_tensor("critic.q2_fc2.bias", &bias)?;
+            collect_tensor("critic.q2_fc2.bias", bias)?;
         }
 
         collect_tensor("critic.q2_ln2.weight", self.critic.q2_ln2.weight())?;
         if let Some(bias) = self.critic.q2_ln2.bias() {
-            collect_tensor("critic.q2_ln2.bias", &bias)?;
+            collect_tensor("critic.q2_ln2.bias", bias)?;
         }
 
         collect_tensor("critic.q2_output.weight", self.critic.q2_output.weight())?;
         if let Some(bias) = self.critic.q2_output.bias() {
-            collect_tensor("critic.q2_output.bias", &bias)?;
+            collect_tensor("critic.q2_output.bias", bias)?;
         }
 
         // Save log_alpha
@@ -828,7 +842,7 @@ impl RLAgent for SACAgent {
             .map_err(|e| crate::ExtractionError::ModelError(format!("Failed to convert action probs to vec2: {}", e)))?;
 
         // Find discrete action with highest probability
-        let discrete_action = action_probs_vec.get(0)
+        let discrete_action = action_probs_vec.first()
             .ok_or_else(|| crate::ExtractionError::ModelError("Empty action probabilities".to_string()))?
             .iter()
             .enumerate()
@@ -840,7 +854,7 @@ impl RLAgent for SACAgent {
         let param_mean_vec = param_mean.to_vec2::<f32>()
             .map_err(|e| crate::ExtractionError::ModelError(format!("Failed to convert param mean to vec2: {}", e)))?;
 
-        let continuous_params = param_mean_vec.get(0)
+        let continuous_params = param_mean_vec.first()
             .ok_or_else(|| crate::ExtractionError::ModelError("Empty param mean".to_string()))?
             .clone();
 
@@ -876,10 +890,10 @@ impl RLAgent for SACAgent {
 
         // FIXED: Get current alpha (temperature) - ensure F32 dtype
         let alpha = self.log_alpha.as_tensor().exp()?;
-        let alpha_scalar = if alpha.dims().len() == 0 {
+        let alpha_scalar = if alpha.dims().is_empty() {
             alpha.to_scalar::<f32>()?
         } else {
-            alpha.to_vec1::<f32>()?.get(0).copied().unwrap_or(0.0)
+            alpha.to_vec1::<f32>()?.first().copied().unwrap_or(0.0)
         };
 
         // Update critic
@@ -955,10 +969,10 @@ impl RLAgent for SACAgent {
 
         // Get log_alpha as scalar and broadcast
         let log_alpha_tensor = self.log_alpha.as_tensor();
-        let log_alpha_scalar = if log_alpha_tensor.dims().len() == 0 {
+        let log_alpha_scalar = if log_alpha_tensor.dims().is_empty() {
             log_alpha_tensor.to_scalar::<f32>()?
         } else {
-            log_alpha_tensor.to_vec1::<f32>()?.get(0).copied().unwrap_or(0.0)
+            log_alpha_tensor.to_vec1::<f32>()?.first().copied().unwrap_or(0.0)
         };
 
         let log_alpha_broadcast = Tensor::from_vec(

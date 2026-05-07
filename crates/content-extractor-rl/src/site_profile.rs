@@ -63,7 +63,7 @@ impl SiteProfile {
 
             for (key, value) in result.parameters.iter() {
                 self.avg_parameters.entry(key.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(*value);
             }
         }

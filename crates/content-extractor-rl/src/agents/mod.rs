@@ -14,7 +14,9 @@ use crate::models::NetworkConfig;
 
 /// Algorithm type selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum AlgorithmType {
+    #[default]
     DuelingDQN,
     PPO,
     SAC,
@@ -43,11 +45,6 @@ impl std::fmt::Display for AlgorithmType {
             AlgorithmType::TD3 => write!(f, "TD3"),
             AlgorithmType::Rainbow => write!(f, "Rainbow"),
         }
-    }
-}
-impl Default for AlgorithmType {
-    fn default() -> Self {
-        AlgorithmType::DuelingDQN
     }
 }
 

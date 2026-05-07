@@ -4,7 +4,7 @@
 
 use content_extractor_rl::{Config, BaselineExtractor, Result, train_standard, train_with_improvements, Hyperparameters, TrialResult, GroundTruthData, GroundTruthEvaluator, TrainingPlotter, AlgorithmType};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use indicatif::{ProgressBar, ProgressStyle};
 use bzip2::read::BzDecoder;
 use std::env;
@@ -445,6 +445,7 @@ async fn extract_batch_command(
 }
 
 // Helper function to read URL from JSON file
+#[allow(dead_code)]
 fn get_url_from_json(json_path: &PathBuf) -> String {
     match std::fs::read_to_string(json_path) {
         Ok(json_content) => {
@@ -463,6 +464,7 @@ fn get_url_from_json(json_path: &PathBuf) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn train_command(
     data_dir: PathBuf,
     algorithm: String,
@@ -712,6 +714,7 @@ async fn train_command(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn tune_command(
     data_dir: PathBuf,
     trials: usize,
@@ -740,10 +743,7 @@ async fn tune_command(
     let algo: AlgorithmType = algorithm.parse()
         .map_err(|e: String| content_extractor_rl::ExtractionError::ParseError(e))?;
 
-    let mut config = Config::default();
-    config.algorithm = algo;
-    config.use_cpu_for_tuning = use_cpu || parallel;
-
+    let config = Config { algorithm: algo, use_cpu_for_tuning: use_cpu || parallel, ..Config::default() };
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
     std::fs::create_dir_all(&output_dir)?;
 
@@ -1009,9 +1009,7 @@ async fn compare_command(
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e: String| content_extractor_rl::ExtractionError::ParseError(e))?;
 
-    let mut config = Config::default();
-    config.max_html_samples = max_samples;
-
+    let config = Config { max_html_samples: max_samples, ..Config::default() };
     let output_dir = output_dir.unwrap_or_else(|| config.output_dir.clone());
 
     let html_samples = load_html_samples(&data_dir, Some(max_samples))?;
@@ -1123,7 +1121,7 @@ fn find_html_json_pairs(dir: &PathBuf, max_pairs: Option<usize>) -> Result<Vec<(
     Ok(pairs)
 }
 
-fn display_model_metadata(model_path: &PathBuf) {
+fn display_model_metadata(model_path: &Path) {
     use content_extractor_rl::ModelMetadata;
     info!("Using trained model: {}", model_path.display());
     

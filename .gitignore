@@ -105,7 +105,6 @@ http-client.private.env.json
 target
 temp
 logs
-.claude
 .cargo
 output
 site_profiles

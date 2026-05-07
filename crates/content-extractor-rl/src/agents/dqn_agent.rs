@@ -342,7 +342,7 @@ impl DQNAgent {
                 }
             }
 
-            if self.step_count % 1000 == 0 {
+            if self.step_count.is_multiple_of(1000) {
                 info!("Gradient norm: {:.4}, clipped with coef: {:.4}", total_norm, clip_coef);
             }
         }
@@ -430,7 +430,7 @@ impl DQNAgent {
         num_params: usize,
         device: &Device,
     ) -> Result<Self> {
-        tracing::info!("Loading model on device: {}", crate::device::get_device_info(&device));
+        tracing::info!("Loading model on device: {}", crate::device::get_device_info(device));
 
         let online_network = DuelingDQN::load_from_onnx(path, state_dim, num_actions, num_params, device)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
@@ -699,7 +699,7 @@ impl RLAgent for DQNAgent {
                 }
             }
 
-            if self.step_count % 1000 == 0 {
+            if self.step_count.is_multiple_of(1000) {
                 info!("Gradient norm: {:.4}, clipped with coef: {:.4}", total_norm, clip_coef);
             }
         }

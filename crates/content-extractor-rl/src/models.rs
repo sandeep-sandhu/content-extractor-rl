@@ -88,16 +88,16 @@ impl ModelMetadata {
         use std::io::Read;
 
         let mut file = File::open(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         let mut metadata_len_bytes = [0u8; 8];
         file.read_exact(&mut metadata_len_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
 
         let mut metadata_bytes = vec![0u8; metadata_len];
         file.read_exact(&mut metadata_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         let metadata_json = String::from_utf8(metadata_bytes)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
@@ -136,6 +136,7 @@ impl ModelMetadata {
 /// Generic neural network with dueling architecture
 /// Can be used by any RL algorithm (DQN, PPO, SAC, etc.)
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct DuelingNetwork {
     // Shared feature encoder
     feature_layers: Vec<Linear>,
@@ -168,11 +169,11 @@ impl DuelingNetwork {
 
         let mut input_dim = config.state_dim;
         for (i, &hidden_size) in config.hidden_layers.iter().enumerate() {
-            let layer = linear(input_dim, hidden_size, vb.pp(&format!("fc{}", i + 1)))?;
+            let layer = linear(input_dim, hidden_size, vb.pp(format!("fc{}", i + 1)))?;
             feature_layers.push(layer);
 
             if config.use_layer_norm {
-                let ln = layer_norm(hidden_size, 1e-5, vb.pp(&format!("ln{}", i + 1)))?;
+                let ln = layer_norm(hidden_size, 1e-5, vb.pp(format!("ln{}", i + 1)))?;
                 layer_norms.push(Some(ln));
             } else {
                 layer_norms.push(None);
@@ -184,14 +185,16 @@ impl DuelingNetwork {
         let final_feature_size = *config.hidden_layers.last().unwrap_or(&128);
 
         // Value stream
-        let mut value_layers = Vec::new();
-        value_layers.push(linear(final_feature_size, config.value_hidden, vb.pp("value_fc1"))?);
-        value_layers.push(linear(config.value_hidden, 1, vb.pp("value_fc2"))?);
+        let value_layers = vec![
+            linear(final_feature_size, config.value_hidden, vb.pp("value_fc1"))?,
+            linear(config.value_hidden, 1, vb.pp("value_fc2"))?,
+        ];
 
         // Advantage stream
-        let mut advantage_layers = Vec::new();
-        advantage_layers.push(linear(final_feature_size, config.advantage_hidden, vb.pp("advantage_fc1"))?);
-        advantage_layers.push(linear(config.advantage_hidden, config.num_actions, vb.pp("advantage_fc2"))?);
+        let advantage_layers = vec![
+            linear(final_feature_size, config.advantage_hidden, vb.pp("advantage_fc1"))?,
+            linear(config.advantage_hidden, config.num_actions, vb.pp("advantage_fc2"))?,
+        ];
 
         // Continuous parameter head
         let param_mean = linear(final_feature_size, config.num_params, vb.pp("param_mean"))?;
@@ -342,7 +345,7 @@ impl DuelingDQN {
 
             // Copy weight data
             let weight_data = src_weight.flatten_all()?.to_vec1::<f32>()?;
-            let new_weight = Tensor::from_vec(
+            let _new_weight = Tensor::from_vec(
                 weight_data,
                 src_weight.dims(),
                 src_weight.device()
@@ -523,7 +526,7 @@ impl DuelingDQN {
         use std::fs::File;
         use std::io::Write;
         let mut file = File::create(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         // Write metadata
         let metadata_json = serde_json::to_string(&metadata)
@@ -532,12 +535,12 @@ impl DuelingDQN {
         let metadata_len = metadata_bytes.len() as u64;
 
         file.write_all(&metadata_len.to_le_bytes())
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         file.write_all(metadata_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         let mut file = File::create(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         // Write metadata
         let metadata_json = serde_json::to_string(&metadata)
@@ -546,9 +549,9 @@ impl DuelingDQN {
         let metadata_len = metadata_bytes.len() as u64;
 
         file.write_all(&metadata_len.to_le_bytes())
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         file.write_all(metadata_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         // Collect all tensors
         let mut tensors: HashMap<String, (Vec<usize>, Vec<f32>)> = HashMap::new();
@@ -594,7 +597,7 @@ impl DuelingDQN {
         // Write tensor count
         let tensor_count = tensors.len() as u64;
         file.write_all(&tensor_count.to_le_bytes())
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         // Write each tensor
         for (name, (shape, data)) in tensors.iter() {
@@ -602,31 +605,31 @@ impl DuelingDQN {
             let name_bytes = name.as_bytes();
             let name_len = name_bytes.len() as u64;
             file.write_all(&name_len.to_le_bytes())
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             file.write_all(name_bytes)
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
 
             // Shape
             let shape_len = shape.len() as u64;
             file.write_all(&shape_len.to_le_bytes())
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             for &dim in shape {
                 file.write_all(&(dim as u64).to_le_bytes())
-                    .map_err(|e| candle_core::Error::Io(e))?;
+                    .map_err(candle_core::Error::Io)?;
             }
 
             // Data
             let data_len = data.len() as u64;
             file.write_all(&data_len.to_le_bytes())
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             for &value in data {
                 file.write_all(&value.to_le_bytes())
-                    .map_err(|e| candle_core::Error::Io(e))?;
+                    .map_err(candle_core::Error::Io)?;
             }
         }
 
         let file_metadata = std::fs::metadata(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         let file_size = file_metadata.len();
 
         if file_size < 100_000 {
@@ -661,57 +664,57 @@ impl DuelingDQN {
 
         collect_tensor("fc1.weight", self.fc1.weight())?;
         if let Some(bias) = self.fc1.bias() {
-            collect_tensor("fc1.bias", &bias)?;
+            collect_tensor("fc1.bias", bias)?;
         }
 
         collect_tensor("fc2.weight", self.fc2.weight())?;
         if let Some(bias) = self.fc2.bias() {
-            collect_tensor("fc2.bias", &bias)?;
+            collect_tensor("fc2.bias", bias)?;
         }
 
         collect_tensor("fc3.weight", self.fc3.weight())?;
         if let Some(bias) = self.fc3.bias() {
-            collect_tensor("fc3.bias", &bias)?;
+            collect_tensor("fc3.bias", bias)?;
         }
 
         collect_tensor("value_fc1.weight", self.value_fc1.weight())?;
         if let Some(bias) = self.value_fc1.bias() {
-            collect_tensor("value_fc1.bias", &bias)?;
+            collect_tensor("value_fc1.bias", bias)?;
         }
 
         collect_tensor("value_fc2.weight", self.value_fc2.weight())?;
         if let Some(bias) = self.value_fc2.bias() {
-            collect_tensor("value_fc2.bias", &bias)?;
+            collect_tensor("value_fc2.bias", bias)?;
         }
 
         collect_tensor("advantage_fc1.weight", self.advantage_fc1.weight())?;
         if let Some(bias) = self.advantage_fc1.bias() {
-            collect_tensor("advantage_fc1.bias", &bias)?;
+            collect_tensor("advantage_fc1.bias", bias)?;
         }
 
         collect_tensor("advantage_fc2.weight", self.advantage_fc2.weight())?;
         if let Some(bias) = self.advantage_fc2.bias() {
-            collect_tensor("advantage_fc2.bias", &bias)?;
+            collect_tensor("advantage_fc2.bias", bias)?;
         }
 
         collect_tensor("param_mean.weight", self.param_mean.weight())?;
         if let Some(bias) = self.param_mean.bias() {
-            collect_tensor("param_mean.bias", &bias)?;
+            collect_tensor("param_mean.bias", bias)?;
         }
 
         collect_tensor("ln1.weight", self.ln1.weight())?;
         if let Some(bias) = self.ln1.bias() {
-            collect_tensor("ln1.bias", &bias)?;
+            collect_tensor("ln1.bias", bias)?;
         }
 
         collect_tensor("ln2.weight", self.ln2.weight())?;
         if let Some(bias) = self.ln2.bias() {
-            collect_tensor("ln2.bias", &bias)?;
+            collect_tensor("ln2.bias", bias)?;
         }
 
         collect_tensor("ln3.weight", self.ln3.weight())?;
         if let Some(bias) = self.ln3.bias() {
-            collect_tensor("ln3.bias", &bias)?;
+            collect_tensor("ln3.bias", bias)?;
         }
 
         collect_tensor("param_logstd", self.param_logstd.as_tensor())?;
@@ -730,7 +733,7 @@ impl DuelingDQN {
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
         std::fs::write(path, serialized)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         Ok(())
     }
@@ -744,29 +747,32 @@ impl DuelingDQN {
         device: &Device,
     ) -> CandleResult<Self> {
         let data = std::fs::read(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         let safetensors = SafeTensors::deserialize(&data)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
+        // Create model first to populate varmap with correct keys, then overwrite with loaded values
         let mut varmap = candle_nn::VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
+        let mut model = Self::new(state_dim, num_actions, num_params, vb)?;
 
         for (name, tensor_view) in safetensors.tensors() {
             let shape: Vec<usize> = tensor_view.shape().to_vec();
             let data = tensor_view.data();
-
             let float_data: Vec<f32> = data
                 .chunks_exact(4)
                 .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
                 .collect();
-
             let tensor = Tensor::from_vec(float_data, shape, device)?;
-            let var = Var::from_tensor(&tensor)?;
-            varmap.set_one(&name, var.as_tensor())?;
+            if name == "param_logstd" {
+                model.param_logstd = Var::from_tensor(&tensor)?;
+            } else {
+                varmap.set_one(&name, &tensor)?;
+            }
         }
 
-        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
-        Self::new(state_dim, num_actions, num_params, vb)
+        Ok(model)
     }
 
     /// Load model from ONNX format
@@ -781,17 +787,20 @@ impl DuelingDQN {
         use std::io::Read;
 
         let mut file = File::open(path)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         // Read metadata
         let mut metadata_len_bytes = [0u8; 8];
         file.read_exact(&mut metadata_len_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         let metadata_len = u64::from_le_bytes(metadata_len_bytes) as usize;
+        if metadata_len > 10 * 1024 * 1024 {
+            return Err(candle_core::Error::Msg(format!("Invalid model file: metadata length {} is too large", metadata_len)));
+        }
 
         let mut metadata_bytes = vec![0u8; metadata_len];
         file.read_exact(&mut metadata_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
 
         let metadata_json = String::from_utf8(metadata_bytes)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
@@ -815,7 +824,7 @@ impl DuelingDQN {
         // Read tensor count
         let mut tensor_count_bytes = [0u8; 8];
         file.read_exact(&mut tensor_count_bytes)
-            .map_err(|e| candle_core::Error::Io(e))?;
+            .map_err(candle_core::Error::Io)?;
         let tensor_count = u64::from_le_bytes(tensor_count_bytes) as usize;
 
         // Read all tensors
@@ -825,57 +834,61 @@ impl DuelingDQN {
             // Read name
             let mut name_len_bytes = [0u8; 8];
             file.read_exact(&mut name_len_bytes)
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             let name_len = u64::from_le_bytes(name_len_bytes) as usize;
 
             let mut name_bytes = vec![0u8; name_len];
             file.read_exact(&mut name_bytes)
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             let name = String::from_utf8(name_bytes)
                 .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
             // Read shape
             let mut shape_len_bytes = [0u8; 8];
             file.read_exact(&mut shape_len_bytes)
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             let shape_len = u64::from_le_bytes(shape_len_bytes) as usize;
 
             let mut shape = Vec::with_capacity(shape_len);
             for _ in 0..shape_len {
                 let mut dim_bytes = [0u8; 8];
                 file.read_exact(&mut dim_bytes)
-                    .map_err(|e| candle_core::Error::Io(e))?;
+                    .map_err(candle_core::Error::Io)?;
                 shape.push(u64::from_le_bytes(dim_bytes) as usize);
             }
 
             // Read data
             let mut data_len_bytes = [0u8; 8];
             file.read_exact(&mut data_len_bytes)
-                .map_err(|e| candle_core::Error::Io(e))?;
+                .map_err(candle_core::Error::Io)?;
             let data_len = u64::from_le_bytes(data_len_bytes) as usize;
 
             let mut data = Vec::with_capacity(data_len);
             for _ in 0..data_len {
                 let mut value_bytes = [0u8; 4];
                 file.read_exact(&mut value_bytes)
-                    .map_err(|e| candle_core::Error::Io(e))?;
+                    .map_err(candle_core::Error::Io)?;
                 data.push(f32::from_le_bytes(value_bytes));
             }
 
             tensors.insert(name, (shape, data));
         }
 
-        // Create VarMap and populate
+        // Create model first to populate varmap with correct keys, then overwrite with loaded values
         let mut varmap = candle_nn::VarMap::new();
+        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
+        let mut model = Self::new(state_dim, num_actions, num_params, vb)?;
 
         for (name, (shape, data)) in tensors.iter() {
             let tensor = Tensor::from_vec(data.clone(), shape.as_slice(), device)?;
-            let var = Var::from_tensor(&tensor)?;
-            varmap.set_one(&name, var.as_tensor())?;
+            if name == "param_logstd" {
+                model.param_logstd = Var::from_tensor(&tensor)?;
+            } else {
+                varmap.set_one(name, &tensor)?;
+            }
         }
 
-        let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
-        Self::new(state_dim, num_actions, num_params, vb)
+        Ok(model)
     }
 
     /// Load with specific device

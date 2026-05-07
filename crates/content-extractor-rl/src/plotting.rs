@@ -78,7 +78,7 @@ impl TrainingPlotter {
     }
 
     /// Plot episode rewards over time with moving average
-    fn plot_rewards<'a, DB: DrawingBackend>(
+    fn plot_rewards<DB: DrawingBackend>(
         &self,
         area: &DrawingArea<DB, plotters::coord::Shift>,
         rewards: &[f32],
@@ -115,7 +115,7 @@ impl TrainingPlotter {
         ))
             .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
             .label("Raw")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
 
         // Plot moving average
         if rewards.len() > 100 {
@@ -130,12 +130,12 @@ impl TrainingPlotter {
             ))
                 .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
                 .label(format!("MA({})", window))
-                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
         }
 
         chart.configure_series_labels()
-            .background_style(&WHITE.mix(0.8))
-            .border_style(&BLACK)
+            .background_style(WHITE.mix(0.8))
+            .border_style(BLACK)
             .draw()
             .map_err(|e| crate::ExtractionError::ModelError(format!("Legend error: {}", e)))?;
 
@@ -143,7 +143,7 @@ impl TrainingPlotter {
     }
 
     /// Plot episode quality over time with moving average
-    fn plot_quality<'a, DB: DrawingBackend>(
+    fn plot_quality<DB: DrawingBackend>(
         &self,
         area: &DrawingArea<DB, plotters::coord::Shift>,
         qualities: &[f32],
@@ -179,7 +179,7 @@ impl TrainingPlotter {
         ))
             .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
             .label("Raw")
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], GREEN));
 
         // Plot moving average
         if qualities.len() > 100 {
@@ -194,12 +194,12 @@ impl TrainingPlotter {
             ))
                 .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
                 .label(format!("MA({})", window))
-                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+                .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
         }
 
         chart.configure_series_labels()
-            .background_style(&WHITE.mix(0.8))
-            .border_style(&BLACK)
+            .background_style(WHITE.mix(0.8))
+            .border_style(BLACK)
             .draw()
             .map_err(|e| crate::ExtractionError::ModelError(format!("Legend error: {}", e)))?;
 
@@ -207,7 +207,7 @@ impl TrainingPlotter {
     }
 
     /// Plot reward distribution histogram
-    fn plot_reward_distribution<'a, DB: DrawingBackend>(
+    fn plot_reward_distribution<DB: DrawingBackend>(
         &self,
         area: &DrawingArea<DB, plotters::coord::Shift>,
         rewards: &[f32],
@@ -267,11 +267,11 @@ impl TrainingPlotter {
         ))
             .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
             .label(format!("Mean: {:.3}", mean))
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
         chart.configure_series_labels()
-            .background_style(&WHITE.mix(0.8))
-            .border_style(&BLACK)
+            .background_style(WHITE.mix(0.8))
+            .border_style(BLACK)
             .draw()
             .map_err(|e| crate::ExtractionError::ModelError(format!("Legend error: {}", e)))?;
 
@@ -279,7 +279,7 @@ impl TrainingPlotter {
     }
 
     /// Plot quality distribution histogram
-    fn plot_quality_distribution<'a, DB: DrawingBackend>(
+    fn plot_quality_distribution<DB: DrawingBackend>(
         &self,
         area: &DrawingArea<DB, plotters::coord::Shift>,
         qualities: &[f32],
@@ -339,11 +339,11 @@ impl TrainingPlotter {
         ))
             .map_err(|e| crate::ExtractionError::ModelError(format!("Series error: {}", e)))?
             .label(format!("Mean: {:.3}", mean))
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
         chart.configure_series_labels()
-            .background_style(&WHITE.mix(0.8))
-            .border_style(&BLACK)
+            .background_style(WHITE.mix(0.8))
+            .border_style(BLACK)
             .draw()
             .map_err(|e| crate::ExtractionError::ModelError(format!("Legend error: {}", e)))?;
 
