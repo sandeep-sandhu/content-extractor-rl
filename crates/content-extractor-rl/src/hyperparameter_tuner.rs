@@ -7,7 +7,7 @@ use crate::{AlgorithmType, Config, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use rand::Rng;
+use rand::RngExt;
 use tracing::{info, warn};
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -350,7 +350,7 @@ impl TPEOptimizer {
     }
 
     /// Random hyperparameter suggestion for initial trials
-    pub fn random_suggest(&self, rng: &mut impl Rng) -> Hyperparameters {
+    pub fn random_suggest(&self, rng: &mut impl RngExt) -> Hyperparameters {
         // Sample random network architecture
         let hidden_layers = self.space.hidden_layer_sizes
             .get(rng.random_range(0..self.space.hidden_layer_sizes.len()))
@@ -402,7 +402,7 @@ impl TPEOptimizer {
         good_values: Vec<&T>,
         _bad_values: Vec<&T>,
         choices: &[T],
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
     ) -> T {
         if good_values.is_empty() {
             return choices[rng.random_range(0..choices.len())].clone();
@@ -441,7 +441,7 @@ impl TPEOptimizer {
         &self,
         good_values: Vec<bool>,
         _bad_values: Vec<bool>,
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
     ) -> bool {
         if good_values.is_empty() {
             return rng.random();
@@ -478,7 +478,7 @@ impl TPEOptimizer {
         good_values: Vec<f64>,
         _bad_values: Vec<f64>,
         bounds: (f64, f64),
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
     ) -> f64 {
         if good_values.is_empty() {
             return rng.random_range(bounds.0..bounds.1);
@@ -507,7 +507,7 @@ impl TPEOptimizer {
         good_values: Vec<usize>,
         _bad_values: Vec<usize>,
         choices: &[usize],
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
     ) -> usize {
         if good_values.is_empty() {
             return *choices.get(rng.random_range(0..choices.len())).unwrap();
@@ -546,7 +546,7 @@ impl TPEOptimizer {
         mean: f64,
         std: f64,
         bounds: (f64, f64),
-        rng: &mut impl Rng,
+        rng: &mut impl RngExt,
     ) -> f64 {
         use rand_distr::{Normal, Distribution};
 

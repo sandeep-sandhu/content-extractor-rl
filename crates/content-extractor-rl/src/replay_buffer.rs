@@ -2,7 +2,7 @@
 // FILE: crates/content-extractor-rl/src/replay_buffer.rs
 // ============================================================================
 
-use rand::Rng;
+use rand::RngExt;
 use std::collections::VecDeque;
 
 /// Experience tuple

@@ -6,7 +6,7 @@ use candle_core::{Device, Tensor, DType, Var};
 use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap, Linear, Module, linear, layer_norm, LayerNorm};
 use crate::replay_buffer::{PrioritizedReplayBuffer};
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
-use rand::Rng;
+use rand::RngExt;
 use rand_distr::{Normal, Distribution};
 use std::path::{Path, PathBuf};
 use crate::models::ModelMetadata;

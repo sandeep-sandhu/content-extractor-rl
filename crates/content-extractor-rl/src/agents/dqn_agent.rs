@@ -7,7 +7,7 @@ use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap};
 use crate::models::{DuelingDQN, NetworkConfig};
 use crate::replay_buffer::{PrioritizedReplayBuffer, SampledBatch};
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
-use rand::Rng;
+use rand::RngExt;
 use tracing::{info, warn};
 use std::path::Path;
 
