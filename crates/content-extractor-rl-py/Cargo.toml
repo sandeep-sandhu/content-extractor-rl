@@ -14,14 +14,14 @@ name = "content_extractor_rl_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.0", default-features = false }
+content-extractor-rl = { path = "../content-extractor-rl", version = "0.1", default-features = false }
 pyo3.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-url = "2.5.7"
+url = "2.5.8"
 
 [build-dependencies]
-pyo3-build-config = "0.21"
+pyo3-build-config = "0.28.2"
 
 [features]
 default = []
