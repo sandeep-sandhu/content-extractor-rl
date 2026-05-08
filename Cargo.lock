@@ -513,7 +513,7 @@ checksum = "0dabb6555f92fb9ee4140454eb5dcd14c7960e1225c6d1a6cc361f032947713e"
 
 [[package]]
 name = "content-extractor-rl"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bzip2",
@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "content-extractor-rl-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "algorithm",
  "anyhow",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "content-extractor-rl-py"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "content-extractor-rl",
