@@ -1,0 +1,25 @@
+{
+  "learning_rate": 0.0025255473609828148,
+  "batch_size": 2048,
+  "gamma": 0.856001451744708,
+  "epsilon_decay": 0.9851364706703125,
+  "priority_alpha": 0.6153123363677477,
+  "priority_beta": 0.6548370675680791,
+  "network_config": {
+    "state_dim": 300,
+    "num_actions": 16,
+    "num_params": 6,
+    "hidden_layers": [
+      512,
+      512,
+      256,
+      128
+    ],
+    "use_layer_norm": false,
+    "dropout": 0.006890598,
+    "value_hidden": 32,
+    "advantage_hidden": 128
+  },
+  "timestamp": "2026-05-10T07:23:25.571613473+00:00",
+  "quality_score": 0.7660106420516968
+}

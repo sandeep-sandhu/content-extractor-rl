@@ -338,20 +338,22 @@ fn test_text_quality_calculation() {
 
 #[test]
 fn test_config_from_env() {
-    std::env::set_var("ARTICLE_EXTRACTOR_MODEL_PATH", "/tmp/model.onnx");
-    std::env::set_var("ARTICLE_EXTRACTOR_SITE_PROFILES", "/tmp/profiles");
-    std::env::set_var("ARTICLE_EXTRACTOR_OUTPUT_DIR", "/tmp/output");
+    unsafe {
+        std::env::set_var("ARTICLE_EXTRACTOR_MODEL_PATH", "/tmp/model.onnx");
+        std::env::set_var("ARTICLE_EXTRACTOR_SITE_PROFILES", "/tmp/profiles");
+        std::env::set_var("ARTICLE_EXTRACTOR_OUTPUT_DIR", "/tmp/output");
 
-    let config = Config::from_env().unwrap();
+        let config = Config::from_env().unwrap();
 
-    assert_eq!(config.model_path, Some(PathBuf::from("/tmp/model.onnx")));
-    assert_eq!(config.site_profiles_dir, PathBuf::from("/tmp/profiles"));
-    assert_eq!(config.output_dir, PathBuf::from("/tmp/output"));
+        assert_eq!(config.model_path, Some(PathBuf::from("/tmp/model.onnx")));
+        assert_eq!(config.site_profiles_dir, PathBuf::from("/tmp/profiles"));
+        assert_eq!(config.output_dir, PathBuf::from("/tmp/output"));
 
-    // Clean up
-    std::env::remove_var("ARTICLE_EXTRACTOR_MODEL_PATH");
-    std::env::remove_var("ARTICLE_EXTRACTOR_SITE_PROFILES");
-    std::env::remove_var("ARTICLE_EXTRACTOR_OUTPUT_DIR");
+        // Clean up
+        std::env::remove_var("ARTICLE_EXTRACTOR_MODEL_PATH");
+        std::env::remove_var("ARTICLE_EXTRACTOR_SITE_PROFILES");
+        std::env::remove_var("ARTICLE_EXTRACTOR_OUTPUT_DIR");
+    }
 }
 
 #[test]

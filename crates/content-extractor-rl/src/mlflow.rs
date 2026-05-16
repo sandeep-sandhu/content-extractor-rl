@@ -115,7 +115,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref client), Some(ref runtime)) = (&self.client, &self.runtime) {
+            if let (Some(client), Some(runtime)) = (&self.client, &self.runtime) {
                 // Create or get experiment
                 let experiment_id = runtime.block_on(async {
                     match client.create_experiment(&self.experiment_name, vec![]).await {
@@ -162,7 +162,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref _client), Some(ref _runtime), Some(ref _run_id)) =
+            if let (Some(_client), Some(_runtime), Some(_run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 for (key, value) in params {
@@ -184,7 +184,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref _client), Some(ref _runtime), Some(ref _run_id)) =
+            if let (Some(_client), Some(_runtime), Some(_run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 let step = step.unwrap_or(0);
@@ -259,7 +259,7 @@ impl MlflowTracker {
 
         #[cfg(feature = "mlflow-rs")]
         {
-            if let (Some(ref _client), Some(ref _runtime), Some(ref run_id)) =
+            if let (Some(_client), Some(_runtime), Some(run_id)) =
                 (&self.client, &self.runtime, &self.run_id)
             {
                 // Log final status as a param

@@ -138,10 +138,10 @@ mod tests {
 
     #[test]
     fn test_force_cpu() {
-        std::env::set_var("CONTENT_EXTRACTOR_RL_FORCE_CPU", "1");
+        unsafe { std::env::set_var("CONTENT_EXTRACTOR_RL_FORCE_CPU", "1"); }
         let device = get_device();
         assert!(matches!(device, Device::Cpu));
-        std::env::remove_var("CONTENT_EXTRACTOR_RL_FORCE_CPU");
+        unsafe { std::env::remove_var("CONTENT_EXTRACTOR_RL_FORCE_CPU"); }
     }
 
     #[test]
