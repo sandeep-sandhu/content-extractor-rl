@@ -7,7 +7,7 @@ use candle_core::{Device, Tensor, DType, Var};
 use candle_nn::{VarBuilder, Optimizer, AdamW, ParamsAdamW, VarMap, Linear, Module, linear, layer_norm, LayerNorm};
 use crate::replay_buffer::PrioritizedReplayBuffer;
 use crate::{Result, agents::{RLAgent, AlgorithmType, AgentInfo}};
-use tracing::info;
+
 use std::path::Path;
 use std::collections::HashMap;
 use crate::models::ModelMetadata;
@@ -180,8 +180,8 @@ pub struct SACAgent {
 
     #[allow(dead_code)]
     actor_varmap: VarMap,
-    #[allow(dead_code)]
     critic_varmap: VarMap,
+    target_critic_varmap: VarMap,
     #[allow(dead_code)]
     alpha_varmap: VarMap,
 
@@ -242,41 +242,6 @@ fn save_layernorm_helper(
     Ok(())
 }
 
-/// Helper to perform soft update between two linear layers
-fn soft_update_linear(
-    target: &Linear,
-    source: &Linear,
-    _tau: f32,
-    _device: &Device,
-) -> candle_core::error::Result<()> {
-    // Soft update: target = tau * source + (1 - tau) * target
-    // Note: This is a conceptual implementation
-    // Candle doesn't provide direct weight mutation, so this is a placeholder
-    // In practice, you'd need to recreate the network or use a different approach
-
-    let _source_weight = source.weight();
-    let _target_weight = target.weight();
-
-    // TODO: Implement actual weight interpolation when candle supports it
-    // For now, this is a no-op
-
-    Ok(())
-}
-
-/// Helper to perform soft update between two layer norms
-fn soft_update_layernorm(
-    target: &LayerNorm,
-    source: &LayerNorm,
-    _tau: f32,
-    _device: &Device,
-) -> candle_core::error::Result<()> {
-    let _source_weight = source.weight();
-    let _target_weight = target.weight();
-
-    // TODO: Implement actual weight interpolation when candle supports it
-
-    Ok(())
-}
 
 impl SACAgent {
     #[allow(clippy::too_many_arguments)]
@@ -304,6 +269,21 @@ impl SACAgent {
         let target_vb = VarBuilder::from_varmap(&target_critic_varmap, DType::F32, device);
         let target_critic = SACCriticNetwork::new(state_dim, num_actions, num_params, target_vb.pp("target"))
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+
+        // Hard-copy critic weights into target critic so they start identical.
+        {
+            let critic_data = critic_varmap.data().lock().unwrap();
+            let target_data = target_critic_varmap.data().lock().unwrap();
+            for (target_name, target_var) in target_data.iter() {
+                if let Some(suffix) = target_name.strip_prefix("target.") {
+                    let online_name = format!("online.{}", suffix);
+                    if let Some(online_var) = critic_data.get(&online_name) {
+                        target_var.set(online_var.as_tensor())
+                            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+                    }
+                }
+            }
+        }
 
         // Initialize temperature (alpha) for entropy regularization - ensure F32 dtype
         let alpha_varmap = VarMap::new();
@@ -338,6 +318,7 @@ impl SACAgent {
             target_entropy,
             actor_varmap,
             critic_varmap,
+            target_critic_varmap,
             alpha_varmap,
             num_actions,
             num_params,
@@ -364,7 +345,8 @@ impl SACAgent {
         let action_continuous = (&param_mean + &param_std.mul(&noise)?)?;
 
         // Calculate log probability for entropy
-        let log_prob_discrete = action_probs.log()?.mul(&action_discrete_onehot)?.sum(1)?;
+        // Clamp before log to prevent log(0) = -inf, which produces NaN via -inf * 0.
+        let log_prob_discrete = action_probs.clamp(1e-8_f32, 1.0_f32)?.log()?.mul(&action_discrete_onehot)?.sum(1)?;
         let log_prob_continuous = self.gaussian_log_prob(&param_mean, &param_std, &action_continuous)?;
         let log_prob = (log_prob_discrete + log_prob_continuous)?;
 
@@ -408,8 +390,10 @@ impl SACAgent {
             std.clone()
         };
 
-        let variance = std_broadcast.sqr()?;
-        let log_std = std_broadcast.log()?;
+        // Clamp std to prevent log(0) and division by near-zero variance.
+        let std_clamped = std_broadcast.clamp(1e-6_f32, 1e6_f32)?;
+        let variance = std_clamped.sqr()?;
+        let log_std = std_clamped.log()?;
         let diff = (value - mean)?;
 
         // FIXED: Create pi constant with proper F32 dtype
@@ -436,44 +420,28 @@ impl SACAgent {
                 )?)?
         )?)?;
 
-        nll.sum(1)
+        // Return log probability (negative NLL) so callers get a negative value
+        // consistent with log_prob_discrete and the SAC Bellman target formulation.
+        nll.neg()?.sum(1)
     }
 
-    /// Soft update of target network
+    /// Soft update of target network: target = tau * online + (1 - tau) * target
     fn soft_update_target(&mut self) -> Result<()> {
-        // Soft update: target = tau * online + (1 - tau) * target
-        // Note: Candle doesn't provide easy weight mutation, so we implement a simplified version
-
-        // For Q-networks, do soft updates on all layers
         let tau = self.tau;
-        let device = &self.device;
+        let critic_data = self.critic_varmap.data().lock().unwrap();
+        let target_data = self.target_critic_varmap.data().lock().unwrap();
 
-        // In a full implementation, you would interpolate weights like:
-        // target_weight = tau * online_weight + (1 - tau) * target_weight
-
-        // Since candle doesn't easily support in-place weight updates,
-        // we'll do periodic hard copies instead
-        if self.step_count.is_multiple_of(100) {
-            // This is where you'd copy weights from critic to target_critic
-            // For now, we log the update
-
-            if self.step_count.is_multiple_of(1000) {
-                info!("SAC target network update at step {} (tau={})", self.step_count, tau);
+        for (target_name, target_var) in target_data.iter() {
+            // target_name is e.g. "target.q1_fc1.weight"; online key is "online.q1_fc1.weight"
+            if let Some(suffix) = target_name.strip_prefix("target.") {
+                let online_name = format!("online.{}", suffix);
+                if let Some(online_var) = critic_data.get(&online_name) {
+                    let new_val = ((online_var.as_tensor() * tau as f64)?
+                        + (target_var.as_tensor() * (1.0 - tau) as f64)?)?;
+                    target_var.set(&new_val)
+                        .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+                }
             }
-
-            // Attempt soft update on each layer
-            // Note: These are no-ops until candle supports weight mutation
-            let _ = soft_update_linear(&self.target_critic.q1_fc1, &self.critic.q1_fc1, tau, device);
-            let _ = soft_update_layernorm(&self.target_critic.q1_ln1, &self.critic.q1_ln1, tau, device);
-            let _ = soft_update_linear(&self.target_critic.q1_fc2, &self.critic.q1_fc2, tau, device);
-            let _ = soft_update_layernorm(&self.target_critic.q1_ln2, &self.critic.q1_ln2, tau, device);
-            let _ = soft_update_linear(&self.target_critic.q1_output, &self.critic.q1_output, tau, device);
-
-            let _ = soft_update_linear(&self.target_critic.q2_fc1, &self.critic.q2_fc1, tau, device);
-            let _ = soft_update_layernorm(&self.target_critic.q2_ln1, &self.critic.q2_ln1, tau, device);
-            let _ = soft_update_linear(&self.target_critic.q2_fc2, &self.critic.q2_fc2, tau, device);
-            let _ = soft_update_layernorm(&self.target_critic.q2_ln2, &self.critic.q2_ln2, tau, device);
-            let _ = soft_update_linear(&self.target_critic.q2_output, &self.critic.q2_output, tau, device);
         }
 
         Ok(())
@@ -936,6 +904,14 @@ impl RLAgent for SACAgent {
                 (&current_q2 - &target_q)?.sqr()?
         )?.mean_all()?;
 
+        // Guard: if loss is NaN/Inf, return NaN early without applying gradients
+        // so the model weights are not corrupted by a bad gradient update.
+        // The caller's existing NaN detection will log the warning and skip.
+        let critic_loss_val = critic_loss.to_scalar::<f32>()?;
+        if critic_loss_val.is_nan() || critic_loss_val.is_infinite() {
+            return Ok(f32::NAN);
+        }
+
         // Backward and update critic
         let critic_grads = critic_loss.backward()?;
         self.critic_optimizer.step(&critic_grads)
@@ -951,37 +927,32 @@ impl RLAgent for SACAgent {
         let alpha_broadcast_actor = Tensor::from_vec(vec![alpha_scalar; log_prob_size], &[log_prob_size], &self.device)?;
         let actor_loss = (&alpha_broadcast_actor.mul(&log_prob)? - &q_new)?.mean_all()?;
 
+        let actor_loss_val = actor_loss.to_scalar::<f32>()?;
+        if actor_loss_val.is_nan() || actor_loss_val.is_infinite() {
+            return Ok(f32::NAN);
+        }
+
         let actor_grads = actor_loss.backward()?;
         self.actor_optimizer.step(&actor_grads)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
         // Update temperature (alpha)
-        // Broadcast target_entropy to match log_prob shape - explicit F32
+        // Detach log_prob so only log_alpha receives gradients here.
         let target_entropy_tensor = Tensor::from_vec(
             vec![self.target_entropy; log_prob_size],
             &[log_prob_size],
             &self.device
         )?;
+        let alpha_loss_term = (&log_prob.detach() + &target_entropy_tensor)?;
 
-        // FIXED: Handle alpha loss calculation - detach returns Result
-        let alpha_loss_term = (&log_prob + &target_entropy_tensor)?;
-        let alpha_loss_term_detached = alpha_loss_term.detach();
+        // Derive alpha_loss from self.log_alpha directly so gradients flow to it.
+        let log_alpha_broadcast = self.log_alpha.as_tensor().broadcast_as(&[log_prob_size])?;
+        let alpha_loss = (log_alpha_broadcast.neg()? * &alpha_loss_term)?.mean_all()?;
 
-        // Get log_alpha as scalar and broadcast
-        let log_alpha_tensor = self.log_alpha.as_tensor();
-        let log_alpha_scalar = if log_alpha_tensor.dims().is_empty() {
-            log_alpha_tensor.to_scalar::<f32>()?
-        } else {
-            log_alpha_tensor.to_vec1::<f32>()?.first().copied().unwrap_or(0.0)
-        };
-
-        let log_alpha_broadcast = Tensor::from_vec(
-            vec![log_alpha_scalar; log_prob_size],
-            &[log_prob_size],
-            &self.device
-        )?;
-
-        let alpha_loss = (&log_alpha_broadcast.neg()? * &alpha_loss_term_detached)?.mean_all()?;
+        let alpha_loss_val = alpha_loss.to_scalar::<f32>()?;
+        if alpha_loss_val.is_nan() || alpha_loss_val.is_infinite() {
+            return Ok(critic_loss.to_scalar::<f32>()?);
+        }
 
         let alpha_grads = alpha_loss.backward()?;
         self.alpha_optimizer.step(&alpha_grads)

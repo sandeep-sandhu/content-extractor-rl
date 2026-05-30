@@ -17,6 +17,7 @@ pub struct DQNAgent {
     target_network: DuelingDQN,
     optimizer: AdamW,
     varmap: VarMap,
+    target_varmap: VarMap,
     num_actions: usize,
     num_params: usize,
     gamma: f32,
@@ -43,15 +44,16 @@ impl DQNAgent {
 
         let target_varmap = VarMap::new();
         let target_vb = VarBuilder::from_varmap(&target_varmap, DType::F32, device);
-        let mut target_network = DuelingDQN::new(
+        let target_network = DuelingDQN::new(
             network_config.state_dim,
             network_config.num_actions,
             network_config.num_params,
             target_vb.pp("target")
         )?;
 
-        // Get trainable variables from the varmap
-        let trainable_vars = varmap.all_vars();
+        // Include param_logstd so its gradient is applied by the optimizer.
+        let mut trainable_vars = varmap.all_vars();
+        trainable_vars.push(online_network.param_logstd_var().clone());
 
         let params = ParamsAdamW {
             lr,
@@ -64,15 +66,27 @@ impl DQNAgent {
         let optimizer = AdamW::new(trainable_vars, params)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
-        // Copy online network weights to target network initially
-        target_network.copy_weights_from(&online_network)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+        // Hard-copy online weights into target network so they start identical.
+        {
+            let online_data = varmap.data().lock().unwrap();
+            let target_data = target_varmap.data().lock().unwrap();
+            for (target_name, target_var) in target_data.iter() {
+                if let Some(suffix) = target_name.strip_prefix("target.") {
+                    let online_name = format!("online.{}", suffix);
+                    if let Some(online_var) = online_data.get(&online_name) {
+                        target_var.set(online_var.as_tensor())
+                            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
+                    }
+                }
+            }
+        }
 
         Ok(Self {
             online_network,
             target_network,
             optimizer,
             varmap,
+            target_varmap,
             num_actions: network_config.num_actions,
             num_params: network_config.num_params,
             gamma,
@@ -81,20 +95,19 @@ impl DQNAgent {
         })
     }
 
-    /// Copy weights from source network to target network
-    fn copy_network_weights(source: &DuelingDQN, target: &mut DuelingDQN) -> Result<()> {
-        target.copy_weights_from(source)
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))
-    }
-
-    /// Update target network using soft update
-    pub fn update_target_network(&mut self) {
-        // Implement hard update (full copy of weights)
-        // For soft update with tau, you would blend: target = tau * online + (1-tau) * target
-        if let Err(e) = Self::copy_network_weights(&self.online_network, &mut self.target_network) {
-            warn!("Failed to update target network: {}", e);
-        } else {
-            info!("Target network updated (hard update)");
+    /// Hard-copy online network weights into target network via VarMap.
+    pub fn do_target_network_update(&mut self) {
+        let online_data = self.varmap.data().lock().unwrap();
+        let target_data = self.target_varmap.data().lock().unwrap();
+        for (target_name, target_var) in target_data.iter() {
+            if let Some(suffix) = target_name.strip_prefix("target.") {
+                let online_name = format!("online.{}", suffix);
+                if let Some(online_var) = online_data.get(&online_name) {
+                    if let Err(e) = target_var.set(online_var.as_tensor()) {
+                        warn!("Failed to copy target weight {}: {}", target_name, e);
+                    }
+                }
+            }
         }
     }
 
@@ -277,21 +290,11 @@ impl DQNAgent {
         // Parameter loss (Negative log-likelihood of Gaussian)
         let param_loss = self.calculate_param_loss(&param_means, &param_stds, &actions_params_tensor)?;
 
-        // Combine losses
-        let loss_q_scalar = loss_q.to_scalar::<f32>()
+        // Combine losses keeping the computation graph intact for proper backpropagation.
+        let param_loss_weighted = (&param_loss * 0.1_f64)?;
+        let total_loss = (&loss_q + &param_loss_weighted)?;
+        let total_loss_scalar = total_loss.to_scalar::<f32>()
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
-        let param_loss_scalar = param_loss.to_scalar::<f32>()
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
-        let total_loss_scalar = loss_q_scalar + 0.1 * param_loss_scalar;
-
-        // Create tensor from combined scalar
-        let total_loss = Tensor::from_vec(
-            vec![total_loss_scalar],
-            &[1],
-            &self.device
-        )?;
 
         // VALIDATION: Check final loss
         if total_loss_scalar.is_nan() || total_loss_scalar.is_infinite() {
@@ -327,17 +330,7 @@ impl DQNAgent {
             // Apply clipping to each gradient
             for var in self.varmap.all_vars() {
                 if let Some(grad) = grad_store.get(&var) {
-                    // Create a tensor for the clip coefficient
-                    let clip_coef_tensor = Tensor::from_vec(
-                        vec![clip_coef],
-                        &[1],
-                        &self.device
-                    )?;
-
-                    // Multiply gradient by clip coefficient
-                    let clipped_grad = grad.mul(&clip_coef_tensor)?;
-
-                    // Update the gradient in the grad store
+                    let clipped_grad = (grad * clip_coef as f64)?;
                     grad_store.insert(&var, clipped_grad);
                 }
             }
@@ -452,6 +445,7 @@ impl DQNAgent {
             target_network,
             optimizer,
             varmap,
+            target_varmap,
             num_actions,
             num_params,
             gamma: 0.95,
@@ -634,21 +628,11 @@ impl RLAgent for DQNAgent {
         // Parameter loss (Negative log-likelihood of Gaussian)
         let param_loss = self.calculate_param_loss(&param_means, &param_stds, &actions_params_tensor)?;
 
-        // Combine losses
-        let loss_q_scalar = loss_q.to_scalar::<f32>()
+        // Combine losses keeping the computation graph intact for proper backpropagation.
+        let param_loss_weighted = (&param_loss * 0.1_f64)?;
+        let total_loss = (&loss_q + &param_loss_weighted)?;
+        let total_loss_scalar = total_loss.to_scalar::<f32>()
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
-        let param_loss_scalar = param_loss.to_scalar::<f32>()
-            .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-
-        let total_loss_scalar = loss_q_scalar + 0.1 * param_loss_scalar;
-
-        // Create tensor from combined scalar
-        let total_loss = Tensor::from_vec(
-            vec![total_loss_scalar],
-            &[1],
-            &self.device
-        )?;
 
         // VALIDATION: Check final loss
         if total_loss_scalar.is_nan() || total_loss_scalar.is_infinite() {
@@ -684,17 +668,7 @@ impl RLAgent for DQNAgent {
             // Apply clipping to each gradient
             for var in self.varmap.all_vars() {
                 if let Some(grad) = grad_store.get(&var) {
-                    // Create a tensor for the clip coefficient
-                    let clip_coef_tensor = Tensor::from_vec(
-                        vec![clip_coef],
-                        &[1],
-                        &self.device
-                    )?;
-
-                    // Multiply gradient by clip coefficient
-                    let clipped_grad = grad.mul(&clip_coef_tensor)?;
-
-                    // Update the gradient in the grad store
+                    let clipped_grad = (grad * clip_coef as f64)?;
                     grad_store.insert(&var, clipped_grad);
                 }
             }
@@ -718,11 +692,8 @@ impl RLAgent for DQNAgent {
     }
 
     fn update_target_network(&mut self) {
-        if let Err(e) = Self::copy_network_weights(&self.online_network, &mut self.target_network) {
-            warn!("Failed to update target network: {}", e);
-        } else {
-            info!("Target network updated (hard update)");
-        }
+        self.do_target_network_update();
+        info!("Target network updated (hard update)");
     }
 
     fn get_step_count(&self) -> usize {

@@ -28,7 +28,7 @@ A high-performance Rust library for extracting article content from HTML pages. 
 - [Architecture](#architecture)
 - [CLI Tool](#cli-tool)
 - [Training Custom Models](#training-custom-models)
-- [Downloading Pre-trained Weights](#downloading-pre-trained-weights)
+- [Pre-trained Models](#pre-trained-models)
 - [API Reference](#api-reference)
 - [Feature Flags](#feature-flags)
 - [Performance Notes](#performance-notes)
@@ -422,9 +422,58 @@ To use `evaluate` and measure accuracy against known-good extractions, provide J
 
 ---
 
-## Downloading Pre-trained Weights
+## Pre-trained Models
 
-Pre-trained model weights are provided as GitHub Release attachments. These are general-purpose models trained on a diverse corpus of news and blog articles.
+Three models are included in the `models/` directory of this repository, each trained for 10,000 episodes on a corpus of 15,000 HTML pages from diverse news and article domains.
+
+### Available ONNX Models
+
+| File | Algorithm | Episodes | Best Quality | File Size | Trained On | Notes |
+|------|-----------|----------|-------------|-----------|------------|-------|
+| `DuelingDQN.onnx` | Dueling DQN | 10,000 | 0.8255 | 1.29 MB | CPU | Production-ready, stable training |
+| `PPO.onnx` | PPO (Actor-Critic) | 10,000 | 0.8445 | 1.26 MB | GPU (CUDA) | Experimental; 36 h training run |
+| `SAC.onnx` | SAC (Twin-Q) | 10,000 | 0.8445 | 3.51 MB | CPU | Experimental; see algorithm notes |
+
+All three files are also available in SafeTensors format alongside best-hyperparameter JSON files for each algorithm.
+
+### Hyperparameters used for training
+
+| Hyperparameter | DuelingDQN | PPO | SAC |
+|---|---|---|---|
+| `learning_rate` | 0.002526 | 0.008220 | 0.005867 |
+| `batch_size` | 2048 | 512 | 8192 |
+| `gamma` | 0.856 | 0.858 | 0.988 |
+| `epsilon_decay` | 0.9851 | 0.9859 | 0.9959 |
+| `hidden_layers` | [512, 512, 256, 128] | [512, 512, 256, 128] | [1024, 512, 256] |
+| `layer_norm` | no | yes | yes |
+
+Hyperparameters were found via TPE Bayesian optimisation (`content-extractor-rl tune`). The full search results are in `output/`.
+
+### Using a pre-trained model
+
+```rust
+use content_extractor_rl::{AgentFactory, AlgorithmType, get_device, Result};
+use std::path::Path;
+
+fn main() -> Result<()> {
+    let device = get_device(false)?; // false = CPU
+    let agent = AgentFactory::load(
+        Path::new("models/DuelingDQN.onnx"),
+        AlgorithmType::DuelingDQN,
+        &device,
+    )?;
+    // use agent for extraction...
+    Ok(())
+}
+```
+
+Use `DuelingDQN.onnx` for all production workloads. The PPO and SAC models are experimental and provided for research comparison only.
+
+### Algorithm notes
+
+- **DuelingDQN** — fully stable training run; no warnings. Best choice for production inference.
+- **PPO** — stable training run on CUDA GPU (36.2 hours). Quality plateaus around episode 7,500.
+- **SAC** — the automatic entropy temperature (`log_alpha`) was not receiving gradient updates in earlier code due to a disconnected computation graph (constant tensor vs. the `Var` leaf). This has been fixed in v0.1.3. The included `SAC.onnx` was trained prior to the fix and should be considered a baseline rather than a tuned model.
 
 ### Downloading via the CLI
 
@@ -434,34 +483,6 @@ content-extractor-rl download-model --output models/
 
 # List available models
 content-extractor-rl download-model --list
-```
-
-### Manual download
-
-Go to [GitHub Releases](https://github.com/sandeepsandhu/content-extractor-rl/releases) and download:
-
-| File | Description | Size |
-|------|-------------|------|
-| `dqn_general_v1.safetensors` | General news/blog articles | ~15 MB |
-| `dqn_news_v1.safetensors` | Tuned for news sites (Reuters, BBC, etc.) | ~15 MB |
-| `site_profiles_v1.tar.gz` | Site-specific XPath profiles | ~1 MB |
-
-### Using a downloaded model
-
-```rust
-use content_extractor_rl::{AgentFactory, AlgorithmType, get_device, Result};
-use std::path::Path;
-
-fn main() -> Result<()> {
-    let device = get_device(false)?; // false = CPU
-    let agent = AgentFactory::load(
-        Path::new("models/dqn_general_v1.safetensors"),
-        AlgorithmType::DuelingDQN,
-        &device,
-    )?;
-    // use agent for extraction...
-    Ok(())
-}
 ```
 
 ---

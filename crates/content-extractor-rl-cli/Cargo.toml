@@ -20,7 +20,9 @@ name = "content-extractor-rl"
 path = "src/main.rs"
 
 [dependencies]
-content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.1", features = ["cuda", "mlflow-rs"] }
+# !!!! cuda DISABLED for ARM ARCHITECTURE, RE-ENABLE HERE !!!!
+#content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.1", features = ["cuda", "mlflow-rs"] }
+content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.1", features = ["mlflow-rs"] }
 clap.workspace = true
 anyhow.workspace = true
 tracing.workspace = true

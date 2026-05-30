@@ -1,24 +1,24 @@
 {
-  "learning_rate": 0.005867150656332987,
-  "batch_size": 8192,
-  "gamma": 0.9879302720346829,
-  "epsilon_decay": 0.9959490606797265,
-  "priority_alpha": 0.7049793598030054,
-  "priority_beta": 0.6981645215068805,
+  "learning_rate": 0.003806845193874804,
+  "batch_size": 256,
+  "gamma": 0.9871992084094607,
+  "epsilon_decay": 0.9886162691754636,
+  "priority_alpha": 0.7483314810643603,
+  "priority_beta": 0.5683292039511362,
   "network_config": {
     "state_dim": 300,
     "num_actions": 16,
     "num_params": 6,
     "hidden_layers": [
-      1024,
       512,
-      256
+      256,
+      128
     ],
     "use_layer_norm": true,
-    "dropout": 0.0018296194,
-    "value_hidden": 192,
-    "advantage_hidden": 64
+    "dropout": 0.00048525928,
+    "value_hidden": 128,
+    "advantage_hidden": 32
   },
-  "timestamp": "2026-05-10T21:21:41.130743625+00:00",
+  "timestamp": "2026-05-30T17:49:15.349272770+00:00",
   "quality_score": 0.7660106420516968
 }

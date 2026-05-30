@@ -358,6 +358,11 @@ impl ActorCriticNetwork {
         Ok((network, varmap))
     }
 
+    /// Return a reference to the learnable log-std Var so callers can add it to an optimizer.
+    pub(crate) fn logstd_var(&self) -> &Var {
+        &self.actor_param_logstd
+    }
+
     /// Update load_with_device to use load_from_file
     pub fn load_with_device(
         path: &Path,
@@ -487,6 +492,7 @@ pub struct PPOAgent {
     entropy_coef: f32,
     ppo_epochs: usize,
 
+    state_dim: usize,
     num_actions: usize,
     num_params: usize,
     gamma: f32,
@@ -507,7 +513,11 @@ impl PPOAgent {
         let vb = VarBuilder::from_varmap(&varmap, DType::F32, device);
         let network = ActorCriticNetwork::new(state_dim, num_actions, num_params, vb)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
-        let trainable_vars = varmap.all_vars();
+
+        // Include actor_param_logstd so its gradient is applied by the optimizer.
+        let mut trainable_vars = varmap.all_vars();
+        trainable_vars.push(network.logstd_var().clone());
+
         let params = ParamsAdamW {
             lr,
             beta1: 0.9,
@@ -528,6 +538,7 @@ impl PPOAgent {
             value_loss_coef: 0.5,
             entropy_coef: 0.01,
             ppo_epochs: 4,
+            state_dim,
             num_actions,
             num_params,
             gamma,
@@ -679,15 +690,20 @@ impl PPOAgent {
         // Entropy bonus
         let entropy = Self::calculate_entropy(&action_logits, &param_std)?;
 
-        // Total loss - combine as scalars
-        let value_loss_weighted = value_loss.to_scalar::<f32>()? * self.value_loss_coef;
-        let entropy_weighted = entropy.to_scalar::<f32>()? * self.entropy_coef;
+        // Total loss — keep all terms connected to the computation graph so backward() works.
+        let value_loss_coef = self.value_loss_coef as f64;
+        let entropy_coef = self.entropy_coef as f64;
+        let total_loss = ((&policy_loss + (value_loss.clone() * value_loss_coef)?)? - (entropy.clone() * entropy_coef)?)?;
+
+        // Read scalars for logging (to_scalar does NOT disconnect the graph).
+        let total_loss_scalar = total_loss.to_scalar::<f32>()?;
         let policy_loss_scalar = policy_loss.to_scalar::<f32>()?;
 
-        let total_loss_scalar = policy_loss_scalar + value_loss_weighted - entropy_weighted;
-
-        // Create tensor from combined scalar for backward pass
-        let total_loss = Tensor::new(&[total_loss_scalar], policy_loss.device())?;
+        if total_loss_scalar.is_nan() || total_loss_scalar.is_infinite() {
+            return Err(crate::ExtractionError::ModelError(
+                format!("Invalid PPO loss: {}", total_loss_scalar)
+            ));
+        }
 
         // Backward and optimize
         let grads = total_loss.backward()
@@ -736,6 +752,7 @@ impl PPOAgent {
             value_loss_coef: 0.5,
             entropy_coef: 0.01,
             ppo_epochs: 4,
+            state_dim,
             num_actions,
             num_params,
             gamma: 0.95,
@@ -774,7 +791,7 @@ impl RLAgent for PPOAgent {
         hyperparameters: HashMap<String, f64>,
     ) -> Result<()> {
         let metadata = ModelMetadata::new(
-            300,
+            self.state_dim,
             self.num_actions,
             self.num_params,
             AlgorithmType::PPO,
@@ -782,7 +799,16 @@ impl RLAgent for PPOAgent {
             hyperparameters,
         );
 
-        self.network.save_to_file(path, metadata)
+        self.network.save_to_file(path, metadata)?;
+
+        let safetensors_path = path.with_extension("safetensors");
+        self.network.save_to_safetensors(&safetensors_path)?;
+
+        tracing::info!("PPO model saved: ONNX ({} bytes), SafeTensors ({} bytes)",
+               std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+               std::fs::metadata(&safetensors_path).map(|m| m.len()).unwrap_or(0));
+
+        Ok(())
     }
 
     fn save(&self, path: &Path) -> Result<()> {
@@ -899,10 +925,27 @@ impl RLAgent for PPOAgent {
     }
 
     fn get_info(&self) -> AgentInfo {
+        // Compute parameter count from the known architecture layout.
+        let sd = self.state_dim;
+        let na = self.num_actions;
+        let np = self.num_params;
+        let num_parameters =
+            (sd * 512 + 512)          // fc1
+            + (512 * 2)               // ln1 (weight + bias)
+            + (512 * 256 + 256)       // fc2
+            + (256 * 2)               // ln2
+            + (256 * 128 + 128)       // fc3
+            + (128 * 2)               // ln3
+            + (128 * na + na)         // actor_discrete
+            + (128 * np + np)         // actor_param_mean
+            + np                      // actor_param_logstd
+            + (128 * 64 + 64)         // critic_fc1
+            + (64 * 1 + 1);           // critic_fc2
+
         AgentInfo {
             algorithm: AlgorithmType::PPO,
-            num_parameters: 0, // TODO: calculate
-            state_dim: 0,
+            num_parameters,
+            state_dim: self.state_dim,
             num_actions: self.num_actions,
             continuous_params: self.num_params,
             version: "1.0.0".to_string(),

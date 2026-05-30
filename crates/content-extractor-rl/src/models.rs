@@ -539,20 +539,6 @@ impl DuelingDQN {
         file.write_all(metadata_bytes)
             .map_err(candle_core::Error::Io)?;
 
-        let mut file = File::create(path)
-            .map_err(candle_core::Error::Io)?;
-
-        // Write metadata
-        let metadata_json = serde_json::to_string(&metadata)
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let metadata_bytes = metadata_json.as_bytes();
-        let metadata_len = metadata_bytes.len() as u64;
-
-        file.write_all(&metadata_len.to_le_bytes())
-            .map_err(candle_core::Error::Io)?;
-        file.write_all(metadata_bytes)
-            .map_err(candle_core::Error::Io)?;
-
         // Collect all tensors
         let mut tensors: HashMap<String, (Vec<usize>, Vec<f32>)> = HashMap::new();
 
@@ -588,8 +574,9 @@ impl DuelingDQN {
         for (name, (_, data)) in tensors.iter() {
             let non_zero = data.iter().filter(|&&x| x.abs() > 1e-10).count();
             let zero_percent = 100.0 * (1.0 - non_zero as f64 / data.len() as f64);
-            if zero_percent > 95.0 {
-                // TODO: ignore if name is 'ln1.bias', 'ln2.bias', or 'ln1.bias'
+            // LayerNorm biases are initialized to 0 by convention; skip them.
+            let is_layernorm_bias = name.ends_with(".bias") && name.starts_with("ln");
+            if zero_percent > 95.0 && !is_layernorm_bias {
                 warn!("WARNING: Tensor '{}' is {:.1}% zeros", name, zero_percent);
             }
         }
@@ -889,6 +876,11 @@ impl DuelingDQN {
         }
 
         Ok(model)
+    }
+
+    /// Return the learnable log-std Var so callers can include it in an optimizer.
+    pub(crate) fn param_logstd_var(&self) -> &Var {
+        &self.param_logstd
     }
 
     /// Load with specific device
