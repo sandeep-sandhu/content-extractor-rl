@@ -1,0 +1,131 @@
+{
+  "domain": "bfsi.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2026-05-20T08:15:07.747156699Z",
+      "quality_score": 0.78248405,
+      "xpath": "/html[1]/body[1]/div[7]/div[1]/div[1]/div[1]/div[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.998485326766968,
+        "paragraph_boost": 1.2110103368759155,
+        "depth_penalty": 0.03324735164642334,
+        "min_word_threshold": 4.975329399108887,
+        "stopword_weight": 1.459749698638916,
+        "sibling_extension": 0.7665472030639648
+      },
+      "text_length": 3704
+    },
+    {
+      "timestamp": "2026-05-20T17:46:13.049668951Z",
+      "quality_score": 0.78248405,
+      "xpath": "/html[1]/body[1]/div[7]/div[1]/div[1]/div[1]/div[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 7.1985602378845215,
+        "sibling_extension": 0.8627909421920776,
+        "link_density_penalty": 1.1535160541534424,
+        "paragraph_boost": 1.9474645853042605,
+        "depth_penalty": 0.16474106907844543,
+        "stopword_weight": 1.376969575881958
+      },
+      "text_length": 3704
+    },
+    {
+      "timestamp": "2026-05-23T18:58:14.100988874Z",
+      "quality_score": 0.78248405,
+      "xpath": "/html[1]/body[1]/div[7]/div[1]/div[1]/div[1]/div[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.0724204778671265,
+        "sibling_extension": 0.7589148283004761,
+        "depth_penalty": 0.08634395897388458,
+        "stopword_weight": 1.6596633195877075,
+        "min_word_threshold": 6.31480598449707,
+        "link_density_penalty": 1.8475301265716553
+      },
+      "text_length": 3704
+    },
+    {
+      "timestamp": "2026-06-01T22:17:40.695706687Z",
+      "quality_score": 0.78248405,
+      "xpath": "/html[1]/body[1]/div[2]",
+      "parameters": {
+        "depth_penalty": 0.3120947480201721,
+        "stopword_weight": 0.9408405423164368,
+        "min_word_threshold": 9.842458724975586,
+        "paragraph_boost": 1.1927299499511719,
+        "link_density_penalty": 0.13000565767288208,
+        "sibling_extension": 0.5834826231002808
+      },
+      "text_length": 3704
+    },
+    {
+      "timestamp": "2026-06-02T03:32:02.720534947Z",
+      "quality_score": 0.78248405,
+      "xpath": "/html[1]/body[1]/div[7]/div[1]/div[1]/div[1]/div[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 0.9408405423164368,
+        "paragraph_boost": 1.1927299499511719,
+        "sibling_extension": 0.5834826231002808,
+        "min_word_threshold": 9.842458724975586,
+        "depth_penalty": 0.3120947480201721,
+        "link_density_penalty": 0.13000565767288208
+      },
+      "text_length": 3704
+    }
+  ],
+  "successful_xpaths": {
+    "/html[1]/body[1]/div[2]": 1,
+    "/html[1]/body[1]/div[7]/div[1]/div[1]/div[1]/div[1]/article[1]": 4
+  },
+  "avg_parameters": {
+    "depth_penalty": [
+      0.03324735164642334,
+      0.16474106907844543,
+      0.08634395897388458,
+      0.3120947480201721,
+      0.3120947480201721
+    ],
+    "min_word_threshold": [
+      4.975329399108887,
+      7.1985602378845215,
+      6.31480598449707,
+      9.842458724975586,
+      9.842458724975586
+    ],
+    "paragraph_boost": [
+      1.2110103368759155,
+      1.9474645853042605,
+      1.0724204778671265,
+      1.1927299499511719,
+      1.1927299499511719
+    ],
+    "link_density_penalty": [
+      1.998485326766968,
+      1.1535160541534424,
+      1.8475301265716553,
+      0.13000565767288208,
+      0.13000565767288208
+    ],
+    "stopword_weight": [
+      1.459749698638916,
+      1.376969575881958,
+      1.6596633195877075,
+      0.9408405423164368,
+      0.9408405423164368
+    ],
+    "sibling_extension": [
+      0.7665472030639648,
+      0.8627909421920776,
+      0.7589148283004761,
+      0.5834826231002808,
+      0.5834826231002808
+    ]
+  },
+  "quality_scores": [
+    0.78248405,
+    0.78248405,
+    0.78248405,
+    0.78248405,
+    0.78248405
+  ],
+  "last_updated": "2026-06-02T03:32:02.720539513Z"
+}

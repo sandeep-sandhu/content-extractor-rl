@@ -10,55 +10,203 @@ use bzip2::read::BzDecoder;
 use std::io::Read;
 use indicatif::{ProgressBar, ProgressStyle};
 use url::Url;
-use crate::agents::dqn_agent::DQNAgent;
+use crate::node_classifier::{HybridExtractor, NodeClassifier};
+use crate::node_features::ExtractionParams;
+use crate::text_utils::TextUtils;
 
-/// Extract article from single HTML file
+/// Outcome of a content-only extraction (text + the node it came from).
+struct ContentExtraction {
+    text: String,
+    xpath: String,
+    method: &'static str,
+}
+
+/// Run a trained RL agent greedily through the environment for one page and
+/// return the highest-quality extraction it produced. This is the real RL
+/// inference path: the agent observes the page's DOM features, picks a content
+/// node and tunes the extraction params, and we keep the best step.
+fn rl_agent_extract(
+    html: &str,
+    url: &str,
+    config: &Config,
+    agent: &dyn RLAgent,
+) -> Result<ContentExtraction> {
+    let baseline = BaselineExtractor::new(config.stopwords.clone());
+    let mut env = ArticleExtractionEnvironment::new(baseline, config.clone());
+    let mut state = env.reset(html, url.to_string(), None, None)?;
+
+    let mut best = ContentExtraction { text: String::new(), xpath: String::new(), method: "rl" };
+    let mut best_quality = f32::MIN;
+    let mut done = false;
+    let mut steps = 0;
+
+    while !done && steps < config.max_steps_per_episode {
+        let action = agent.select_action(&state, 0.0)?; // greedy (epsilon = 0)
+        let (next_state, _reward, is_done, info) = env.step(action)?;
+        if info.quality_score > best_quality && !info.text.trim().is_empty() {
+            best_quality = info.quality_score;
+            best.text = info.text.clone();
+            best.xpath = info.xpath.clone();
+        }
+        state = next_state;
+        done = is_done;
+        steps += 1;
+    }
+
+    Ok(best)
+}
+
+/// Pick the content node with the supervised/heuristic [`HybridExtractor`] and
+/// extract its text. Used when no trained RL model is supplied.
+fn hybrid_extract(html: &str, config: &Config) -> Result<ContentExtraction> {
+    let extractor = HybridExtractor::heuristic(config.stopwords.clone());
+    match extractor.extract(html, config.num_candidate_nodes, &ExtractionParams::default())? {
+        Some(e) => Ok(ContentExtraction { text: e.text, xpath: e.xpath, method: "hybrid" }),
+        None => Ok(ContentExtraction { text: String::new(), xpath: String::new(), method: "hybrid" }),
+    }
+}
+
+/// Extract a complete article (title/date metadata + body) from one page.
+///
+/// Body selection prefers, in order: the trained RL `agent` if supplied, then
+/// the hybrid/heuristic node selector, then the plain baseline. Title and date
+/// always come from the baseline metadata extractor. This is the single shared
+/// entry point used by the CLI and the Python bindings.
+///
+/// ```no_run
+/// use content_extractor_rl::{Config, extract_article};
+/// let config = Config::default();
+/// let html = std::fs::read_to_string("page.html").unwrap();
+/// // No model -> hybrid heuristic selection (no training required):
+/// let article = extract_article(&html, "https://example.com/post", &config, None).unwrap();
+/// println!("{}", article.content);
+/// ```
+pub fn extract_article(
+    html: &str,
+    url: &str,
+    config: &Config,
+    agent: Option<&dyn RLAgent>,
+) -> Result<ExtractedArticle> {
+    let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
+    let baseline_result = baseline_extractor.extract(html)?;
+    let content = extract_content(html, url, config, agent, None, &baseline_result)?;
+    let quality_score = TextUtils::calculate_text_quality(&content.text, &config.stopwords);
+
+    Ok(ExtractedArticle {
+        url: url.to_string(),
+        title: baseline_result.title,
+        date: baseline_result.date,
+        content: content.text,
+        quality_score,
+        method: content.method.to_string(),
+        xpath: Some(content.xpath),
+    })
+}
+
+/// Extract a complete article using a prepared [`HybridExtractor`] (which may be
+/// backed by a trained `NodeClassifier` or the heuristic). Title/date come from
+/// the baseline metadata extractor; falls back to the baseline body if the
+/// hybrid selector returns nothing.
+pub fn extract_article_hybrid(
+    html: &str,
+    url: &str,
+    config: &Config,
+    hybrid: &HybridExtractor,
+) -> Result<ExtractedArticle> {
+    let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
+    let baseline_result = baseline_extractor.extract(html)?;
+
+    let (text, xpath, method) =
+        match hybrid.extract(html, config.num_candidate_nodes, &ExtractionParams::default())? {
+            Some(e) if !e.text.trim().is_empty() => (e.text, e.xpath, "classifier"),
+            _ => (
+                baseline_result.text.clone(),
+                baseline_result.xpath.clone(),
+                "baseline",
+            ),
+        };
+
+    let quality_score = TextUtils::calculate_text_quality(&text, &config.stopwords);
+
+    Ok(ExtractedArticle {
+        url: url.to_string(),
+        title: baseline_result.title,
+        date: baseline_result.date,
+        content: text,
+        quality_score,
+        method: method.to_string(),
+        xpath: Some(xpath),
+    })
+}
+
+/// Extract the article body for one page, preferring (in order): the RL agent if
+/// supplied, then the hybrid/heuristic node selector, then the plain baseline.
+/// Title/date always come from the baseline metadata extractor.
+fn extract_content(
+    html: &str,
+    url: &str,
+    config: &Config,
+    agent: Option<&dyn RLAgent>,
+    hybrid: Option<&HybridExtractor>,
+    baseline_result: &crate::site_profile::ExtractionResult,
+) -> Result<ContentExtraction> {
+    let primary = if let Some(agent) = agent {
+        rl_agent_extract(html, url, config, agent)?
+    } else if let Some(hybrid) = hybrid {
+        match hybrid.extract(html, config.num_candidate_nodes, &ExtractionParams::default())? {
+            Some(e) => ContentExtraction { text: e.text, xpath: e.xpath, method: "classifier" },
+            None => ContentExtraction { text: String::new(), xpath: String::new(), method: "classifier" },
+        }
+    } else {
+        hybrid_extract(html, config)?
+    };
+
+    if primary.text.trim().is_empty() {
+        // Fall back to the baseline body so we never return nothing.
+        Ok(ContentExtraction {
+            text: baseline_result.text.clone(),
+            xpath: baseline_result.xpath.clone(),
+            method: "baseline",
+        })
+    } else {
+        Ok(primary)
+    }
+}
+
+/// Extract article from single HTML file.
+///
+/// Selection priority: RL `model_path` (if any) → trained `classifier_path`
+/// (if any) → hybrid heuristic.
 pub fn extract_single(
     html_file: &Path,
     url: String,
     model_path: Option<&Path>,
+    classifier_path: Option<&Path>,
     output: Option<&Path>,
     config: &Config,
 ) -> Result<ExtractedArticle> {
     let html_content = read_html_file(html_file)?;
-    let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
 
-    // Extract domain for site profile
-    let domain = extract_domain_from_url(&url);
-
-    // Try to load site profile
-    let mut site_memory = SiteProfileMemory::new(&config.site_profiles_dir)?;
-    let site_profile = site_memory.get_profile(&domain);
-
-    let result = if let Some(model_path) = model_path {
+    let article = if let Some(model_path) = model_path {
+        // RL agent (any algorithm — auto-detected).
         let device = get_device();
-        let _agent = DQNAgent::load_with_device(
+        let agent = AgentFactory::load(
             model_path,
             config.state_dim,
             config.num_discrete_actions,
             config.num_continuous_params,
             &device,
         )?;
-
-        // Use site profile if available for better extraction
-        if site_profile.extractions.len() > 5 {
-            tracing::debug!("Using site profile for {} (has {} past extractions)",
-                          domain, site_profile.extractions.len());
-        }
-
-        baseline_extractor.extract(&html_content)?
+        extract_article(&html_content, &url, config, Some(agent.as_ref()))?
+    } else if let Some(classifier_path) = classifier_path {
+        // Supervised node classifier.
+        let device = get_device();
+        let classifier = NodeClassifier::load(classifier_path, &device, config.learning_rate)?;
+        let hybrid = HybridExtractor::with_classifier(classifier, config.stopwords.clone());
+        extract_article_hybrid(&html_content, &url, config, &hybrid)?
     } else {
-        baseline_extractor.extract(&html_content)?
-    };
-
-    let article = ExtractedArticle {
-        url: url.clone(),
-        title: result.title,
-        date: result.date,
-        content: result.text,
-        quality_score: result.quality_score,
-        method: if model_path.is_some() { "rl" } else { "baseline" }.to_string(),
-        xpath: Some(result.xpath),
+        // Hybrid heuristic (no model).
+        extract_article(&html_content, &url, config, None)?
     };
 
     if let Some(output_path) = output {
@@ -76,6 +224,7 @@ pub fn extract_single(
 pub fn extract_batch(
     archive_dir: &Path,
     model_path: Option<&Path>,
+    classifier_path: Option<&Path>,
     output_dir: &Path,
     max_files: Option<usize>,
     _batch_size: usize,
@@ -97,13 +246,25 @@ pub fn extract_batch(
     let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
     let device = get_device();
     let agent = if let Some(path) = model_path {
-        Some(DQNAgent::load_with_device(
+        Some(AgentFactory::load(
             path,
             config.state_dim,
             config.num_discrete_actions,
             config.num_continuous_params,
             &device,
         )?)
+    } else {
+        None
+    };
+
+    // A trained classifier is used only when no RL model is supplied.
+    let hybrid = if agent.is_none() {
+        if let Some(path) = classifier_path {
+            let classifier = NodeClassifier::load(path, &device, config.learning_rate)?;
+            Some(HybridExtractor::with_classifier(classifier, config.stopwords.clone()))
+        } else {
+            None
+        }
     } else {
         None
     };
@@ -146,25 +307,43 @@ pub fn extract_batch(
 
         match baseline_extractor.extract(&html_content) {
             Ok(result) => {
-                let method = if agent.is_some() {
-                    if has_profile { "rl+profile" } else { "rl" }
-                } else if has_profile { "baseline+profile" } else { "baseline" };
+                // Select the content node with the RL agent (if loaded) or the
+                // hybrid heuristic; metadata comes from the baseline result.
+                let content = match extract_content(
+                    &html_content, &url, config, agent.as_deref(), hybrid.as_ref(), &result,
+                ) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        failed.push((url, e.to_string()));
+                        pb.inc(1);
+                        continue;
+                    }
+                };
+
+                let method = if has_profile {
+                    format!("{}+profile", content.method)
+                } else {
+                    content.method.to_string()
+                };
+
+                let quality_score =
+                    TextUtils::calculate_text_quality(&content.text, &config.stopwords);
 
                 let article = ExtractedArticle {
                     url: url.clone(),
                     title: result.title.clone(),
                     date: result.date.clone(),
-                    content: result.text.clone(),
-                    quality_score: result.quality_score,
-                    method: method.to_string(),
-                    xpath: Some(result.xpath.clone()),
+                    content: content.text.clone(),
+                    quality_score,
+                    method,
+                    xpath: Some(content.xpath.clone()),
                 };
 
                 // Update site profile with this extraction
                 let extraction_result = site_profile::ExtractionResult {
-                    text: result.text,
-                    xpath: result.xpath,
-                    quality_score: result.quality_score,
+                    text: content.text,
+                    xpath: content.xpath,
+                    quality_score,
                     parameters: result.parameters,
                     title: result.title,
                     date: result.date,
@@ -329,5 +508,42 @@ mod tests {
 
         let url = read_url_from_json(&json_path);
         assert_eq!(url, "https://example.com/article");
+    }
+
+    #[test]
+    fn test_extract_single_uses_hybrid_without_model() {
+        let temp_dir = TempDir::new().unwrap();
+        let html_path = temp_dir.path().join("page.html");
+        std::fs::write(
+            &html_path,
+            r#"
+            <html><head><title>Mission Update</title></head><body>
+                <nav class="site-nav"><a href="/a">Home</a> <a href="/b">News</a> <a href="/c">More</a></nav>
+                <article class="article-body">
+                    <p>The spacecraft entered orbit today after a long interplanetary cruise phase.</p>
+                    <p>Mission controllers confirmed every instrument survived the journey intact.</p>
+                    <p>Scientific observations of the planet will begin within the next two weeks.</p>
+                </article>
+                <div class="footer-links"><a href="/p">Privacy</a> <a href="/t">Terms</a></div>
+            </body></html>
+            "#,
+        )
+        .unwrap();
+
+        let config = Config::default();
+        let article = extract_single(
+            &html_path,
+            "https://example.com/mission".to_string(),
+            None, // no RL model
+            None, // no classifier -> hybrid heuristic path
+            None, // no output file
+            &config,
+        )
+        .unwrap();
+
+        // The hybrid selector must return the article body, not nav/footer noise.
+        assert_eq!(article.method, "hybrid");
+        assert!(article.content.contains("entered orbit"), "content: {}", article.content);
+        assert!(!article.content.contains("Privacy"), "footer leaked: {}", article.content);
     }
 }

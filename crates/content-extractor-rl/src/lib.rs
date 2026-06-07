@@ -22,6 +22,9 @@ pub mod models;
 pub use models::ModelMetadata;
 
 pub mod environment;
+pub mod node_features;
+pub mod node_classifier;
+pub use node_classifier::{NodeClassifier, HybridExtractor, train_classifier};
 pub mod replay_buffer;
 pub mod reward;
 pub mod curriculum;
@@ -45,7 +48,7 @@ pub use config::Config;
 pub use site_profile::{SiteProfile, SiteProfileMemory};
 pub use baseline_extractor::BaselineExtractor;
 pub use environment::ArticleExtractionEnvironment;
-pub use training::{train_standard, train_with_improvements, TrainingMetrics};
+pub use training::{train_standard, train_with_improvements, TrainingMetrics, TrainingSample};
 pub use hyperparameter_tuner::{TPEOptimizer, Hyperparameters, HyperparameterSpace, TrialResult};
 
 pub use plotting::{TrainingPlotter, PlotConfig};

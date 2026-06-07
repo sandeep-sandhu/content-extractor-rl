@@ -53,6 +53,39 @@ impl TextUtils {
             .collect()
     }
 
+    /// Token-level F1 between an extracted text and a reference (ground truth).
+    ///
+    /// Tokens are lowercased, stopword-filtered and required to be longer than
+    /// two characters — matching `GroundTruthEvaluator`'s normalization so the
+    /// training reward and the offline evaluation metric agree. Returns a value
+    /// in [0, 1]. If the reference is empty the result is 0 (caller decides on a
+    /// fallback reward).
+    pub fn token_f1(extracted: &str, reference: &str, stopwords: &HashSet<String>) -> f32 {
+        let norm = |t: &str| -> HashSet<String> {
+            Self::tokenize(t)
+                .into_iter()
+                .filter(|w| w.len() > 2 && !stopwords.contains(w))
+                .collect()
+        };
+
+        let ext = norm(extracted);
+        let ref_set = norm(reference);
+
+        if ref_set.is_empty() || ext.is_empty() {
+            return 0.0;
+        }
+
+        let intersection = ext.intersection(&ref_set).count() as f32;
+        let precision = intersection / ext.len() as f32;
+        let recall = intersection / ref_set.len() as f32;
+
+        if precision + recall == 0.0 {
+            0.0
+        } else {
+            2.0 * precision * recall / (precision + recall)
+        }
+    }
+
     /// Calculate text quality score
     pub fn calculate_text_quality(text: &str, stopwords: &HashSet<String>) -> f32 {
         if text.len() < 50 {
@@ -120,6 +153,28 @@ mod tests {
         let text = "Hello World! This is a test.";
         let tokens = TextUtils::tokenize(text);
         assert_eq!(tokens, vec!["hello", "world!", "this", "is", "a", "test."]);
+    }
+
+    #[test]
+    fn test_token_f1() {
+        let stopwords: HashSet<_> = vec!["the", "a", "is", "this", "with", "and"]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let reference = "quantum computing breakthrough announced researchers laboratory";
+        let perfect = reference;
+        let partial = "quantum computing breakthrough unrelated padding";
+        let unrelated = "weather forecast sunny tomorrow afternoon";
+
+        let f1_perfect = TextUtils::token_f1(perfect, reference, &stopwords);
+        let f1_partial = TextUtils::token_f1(partial, reference, &stopwords);
+        let f1_unrelated = TextUtils::token_f1(unrelated, reference, &stopwords);
+
+        assert!((f1_perfect - 1.0).abs() < 1e-6, "perfect match should be 1.0, got {f1_perfect}");
+        assert!(f1_partial > 0.0 && f1_partial < f1_perfect);
+        assert!(f1_unrelated < f1_partial);
+        assert_eq!(TextUtils::token_f1("anything", "", &stopwords), 0.0);
     }
 
     #[test]

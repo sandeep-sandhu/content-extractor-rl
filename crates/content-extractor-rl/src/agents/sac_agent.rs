@@ -13,6 +13,41 @@ use std::collections::HashMap;
 use crate::models::ModelMetadata;
 use candle_nn::ops::softmax;
 
+/// Clip the gradients of `vars` in `grads` in-place to a maximum global L2 norm.
+///
+/// This is the standard `clip_grad_norm_` operation. SAC previously lacked it
+/// (unlike the DQN agent, which already clipped), which — combined with the
+/// over-large learning rates produced by the hyperparameter search — let the
+/// actor/critic gradients explode and permanently corrupt the weights with NaN.
+/// Clipping is the real fix; the NaN guards are only a safety net.
+///
+/// Returns the pre-clip global norm (useful for logging / tests).
+fn clip_grad_norm(
+    grads: &mut candle_core::backprop::GradStore,
+    vars: &[Var],
+    max_norm: f32,
+) -> candle_core::Result<f32> {
+    let mut total_sq = 0.0f32;
+    for v in vars {
+        if let Some(g) = grads.get(v) {
+            total_sq += g.sqr()?.sum_all()?.to_scalar::<f32>()?;
+        }
+    }
+    let norm = total_sq.sqrt();
+
+    if norm.is_finite() && norm > max_norm {
+        let coef = (max_norm / (norm + 1e-6)) as f64;
+        for v in vars {
+            if let Some(g) = grads.get(v) {
+                let clipped = (g * coef)?;
+                grads.insert(v, clipped);
+            }
+        }
+    }
+
+    Ok(norm)
+}
+
 /// Actor network for SAC (outputs mean and log_std)
 #[allow(dead_code)]
 pub struct SACActorNetwork {
@@ -912,8 +947,9 @@ impl RLAgent for SACAgent {
             return Ok(f32::NAN);
         }
 
-        // Backward and update critic
-        let critic_grads = critic_loss.backward()?;
+        // Backward and update critic (clip gradients to prevent explosion)
+        let mut critic_grads = critic_loss.backward()?;
+        clip_grad_norm(&mut critic_grads, &self.critic_varmap.all_vars(), 1.0)?;
         self.critic_optimizer.step(&critic_grads)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
@@ -932,7 +968,8 @@ impl RLAgent for SACAgent {
             return Ok(f32::NAN);
         }
 
-        let actor_grads = actor_loss.backward()?;
+        let mut actor_grads = actor_loss.backward()?;
+        clip_grad_norm(&mut actor_grads, &self.actor_varmap.all_vars(), 1.0)?;
         self.actor_optimizer.step(&actor_grads)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 
@@ -954,7 +991,8 @@ impl RLAgent for SACAgent {
             return Ok(critic_loss.to_scalar::<f32>()?);
         }
 
-        let alpha_grads = alpha_loss.backward()?;
+        let mut alpha_grads = alpha_loss.backward()?;
+        clip_grad_norm(&mut alpha_grads, std::slice::from_ref(&self.log_alpha), 1.0)?;
         self.alpha_optimizer.step(&alpha_grads)
             .map_err(|e| crate::ExtractionError::ModelError(e.to_string()))?;
 

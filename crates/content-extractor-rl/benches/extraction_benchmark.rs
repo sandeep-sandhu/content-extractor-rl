@@ -205,6 +205,7 @@ fn benchmark_state_building(c: &mut Criterion) {
             env.reset(
                 black_box(&html),
                 black_box("https://example.com/article".to_string()),
+                None,
                 None
             ).unwrap()
         });

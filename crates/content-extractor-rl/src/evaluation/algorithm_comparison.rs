@@ -146,7 +146,9 @@ impl AlgorithmComparator {
             run_config.num_episodes = episodes;
 
             // Train
-            let (_agent, metrics) = train_standard(&run_config, html_samples.clone())?;
+            let run_samples: Vec<crate::TrainingSample> =
+                html_samples.clone().into_iter().map(Into::into).collect();
+            let (_agent, metrics) = train_standard(&run_config, run_samples)?;
 
             let training_time = start_time.elapsed().as_secs_f64();
 

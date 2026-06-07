@@ -7,8 +7,8 @@ use pyo3::prelude::*;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{PyDict, PyModule};
 use content_extractor_rl::{
-    Config, BaselineExtractor, SiteProfileMemory,
-    ExtractedArticle, BatchExtractionResult, cuda_is_available,
+    Config, SiteProfileMemory,
+    BatchExtractionResult, cuda_is_available,
 };
 use std::path::PathBuf;
 use content_extractor_rl::agents::dqn_agent::DQNAgent;
@@ -16,7 +16,6 @@ use content_extractor_rl::agents::dqn_agent::DQNAgent;
 /// Python wrapper for the content extractor rl
 #[pyclass]
 struct RustArticleExtractor {
-    baseline_extractor: BaselineExtractor,
     agent: Option<DQNAgent>,
     site_memory: SiteProfileMemory,
     config: Config,
@@ -52,8 +51,6 @@ impl RustArticleExtractor {
         config.setup_directories()
             .map_err(|e| PyRuntimeError::new_err(format!("Setup error: {}", e)))?;
 
-        let baseline_extractor = BaselineExtractor::new(config.stopwords.clone());
-
         let site_memory = SiteProfileMemory::new(&config.site_profiles_dir)
             .map_err(|e| PyRuntimeError::new_err(format!("Site memory error: {}", e)))?;
 
@@ -72,7 +69,6 @@ impl RustArticleExtractor {
         };
 
         Ok(Self {
-            baseline_extractor,
             agent,
             site_memory,
             config,
@@ -98,39 +94,32 @@ impl RustArticleExtractor {
     ///     Dictionary containing extracted article data
     #[pyo3(signature = (website_page_html, url))]
     fn extract(&mut self, website_page_html: String, url: String) -> PyResult<Py<PyAny>> {
-        // Extract using baseline or RL model
-        let result = if self.agent.is_some() {
-            // TODO: Use RL agent for extraction
-            self.baseline_extractor.extract(&website_page_html)
-                .map_err(|e| PyRuntimeError::new_err(format!("Extraction error: {}", e)))?
-        } else {
-            self.baseline_extractor.extract(&website_page_html)
-                .map_err(|e| PyRuntimeError::new_err(format!("Extraction error: {}", e)))?
-        };
+        // Use the shared extraction entry point: RL agent when loaded, else the
+        // hybrid/heuristic node selector, with baseline fallback.
+        let agent_ref = self.agent.as_ref().map(|a| a as &dyn content_extractor_rl::RLAgent);
+        let article = content_extractor_rl::extract_article(
+            &website_page_html, &url, &self.config, agent_ref,
+        )
+        .map_err(|e| PyRuntimeError::new_err(format!("Extraction error: {}", e)))?;
 
-        // Extract domain and update site profile
+        // Update + persist the per-domain site profile.
         let domain = url::Url::parse(&url)
             .ok()
             .and_then(|u: url::Url| u.host_str().map(|h: &str| h.to_string()))
             .unwrap_or_else(|| "unknown".to_string());
 
         let profile = self.site_memory.get_profile(&domain);
-        profile.add_extraction(result.clone());
+        profile.add_extraction(content_extractor_rl::site_profile::ExtractionResult {
+            text: article.content.clone(),
+            xpath: article.xpath.clone().unwrap_or_default(),
+            quality_score: article.quality_score,
+            parameters: std::collections::HashMap::new(),
+            title: article.title.clone(),
+            date: article.date.clone(),
+        });
 
-        // Save profile
         self.site_memory.save_profile(&domain)
             .map_err(|e| PyRuntimeError::new_err(format!("Profile save error: {}", e)))?;
-
-        // Create article result
-        let article = ExtractedArticle {
-            url: url.clone(),
-            title: None,
-            date: None,
-            content: result.text,
-            quality_score: result.quality_score,
-            method: if self.agent.is_some() { "rl".to_string() } else { "baseline".to_string() },
-            xpath: Some(result.xpath),
-        };
 
         // Convert to Python dict - FIXED: Use Python::with_gil correctly
         Python::attach(|py| {
@@ -158,18 +147,11 @@ impl RustArticleExtractor {
         let mut articles = Vec::new();
 
         for (html, url) in html_url_pairs {
-            let result = self.baseline_extractor.extract(&html)
-                .map_err(|e| PyRuntimeError::new_err(format!("Extraction error: {}", e)))?;
-
-            let article = ExtractedArticle {
-                url: url.clone(),
-                title: None,
-                date: None,
-                content: result.text,
-                quality_score: result.quality_score,
-                method: "baseline".to_string(),
-                xpath: Some(result.xpath),
-            };
+            let agent_ref = self.agent.as_ref().map(|a| a as &dyn content_extractor_rl::RLAgent);
+            let article = content_extractor_rl::extract_article(
+                &html, &url, &self.config, agent_ref,
+            )
+            .map_err(|e| PyRuntimeError::new_err(format!("Extraction error: {}", e)))?;
 
             articles.push(article);
         }
@@ -220,11 +202,16 @@ impl RustArticleExtractor {
         let mut config = self.config.clone();
         config.num_episodes = episodes;
 
+        // The Python API still accepts (html, url) pairs; convert to
+        // TrainingSample (ground truth None -> quality-proxy reward).
+        let samples: Vec<content_extractor_rl::TrainingSample> =
+            html_samples.into_iter().map(Into::into).collect();
+
         let (_agent, metrics) = if improved {
-            content_extractor_rl::train_with_improvements(&config, html_samples)
+            content_extractor_rl::train_with_improvements(&config, samples)
                 .map_err(|e| PyRuntimeError::new_err(format!("Training error: {}", e)))?
         } else {
-            content_extractor_rl::train_standard(&config, html_samples)
+            content_extractor_rl::train_standard(&config, samples)
                 .map_err(|e| PyRuntimeError::new_err(format!("Training error: {}", e)))?
         };
 

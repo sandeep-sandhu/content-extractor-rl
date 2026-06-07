@@ -1,0 +1,44 @@
+{
+  "domain": "legal.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2025-12-25T06:55:24.457189559Z",
+      "quality_score": 0.5920904,
+      "xpath": "/html[1]/body[1]/div[3]",
+      "parameters": {},
+      "text_length": 801
+    },
+    {
+      "timestamp": "2025-12-25T06:55:54.941368513Z",
+      "quality_score": 0.7644522,
+      "xpath": "/html[1]/body[1]/div[3]",
+      "parameters": {},
+      "text_length": 933
+    },
+    {
+      "timestamp": "2025-12-25T06:55:54.960135077Z",
+      "quality_score": 0.7437322,
+      "xpath": "/html[1]/body[1]/div[3]",
+      "parameters": {},
+      "text_length": 816
+    },
+    {
+      "timestamp": "2025-12-25T06:56:22.398260451Z",
+      "quality_score": 0.7427083,
+      "xpath": "/html[1]/body[1]/div[3]",
+      "parameters": {},
+      "text_length": 842
+    }
+  ],
+  "successful_xpaths": {
+    "/html[1]/body[1]/div[3]": 3
+  },
+  "avg_parameters": {},
+  "quality_scores": [
+    0.5920904,
+    0.7644522,
+    0.7437322,
+    0.7427083
+  ],
+  "last_updated": "2025-12-25T06:56:22.398261824Z"
+}

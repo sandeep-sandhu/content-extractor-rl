@@ -1,0 +1,1737 @@
+{
+  "domain": "brandequity.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2026-05-20T05:32:39.998807052Z",
+      "quality_score": 0.8454546,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.720478057861328,
+        "sibling_extension": 0.5484004020690918,
+        "paragraph_boost": 1.1836369037628174,
+        "stopword_weight": 2.404600143432617,
+        "depth_penalty": 0.20712636411190033,
+        "min_word_threshold": 7.8376970291137695
+      },
+      "text_length": 739
+    },
+    {
+      "timestamp": "2026-05-20T05:40:09.419025417Z",
+      "quality_score": 0.84325063,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.1099729984998703,
+        "sibling_extension": 0.4136955738067627,
+        "link_density_penalty": 1.6638846397399902,
+        "paragraph_boost": 1.1539604663848877,
+        "min_word_threshold": 9.285250663757324,
+        "stopword_weight": 1.5954887866973877
+      },
+      "text_length": 816
+    },
+    {
+      "timestamp": "2026-05-20T05:41:31.877090611Z",
+      "quality_score": 0.6764368,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.3866410255432129,
+        "depth_penalty": 0.074697345495224,
+        "stopword_weight": 1.712660551071167,
+        "paragraph_boost": 1.1200852394104004,
+        "min_word_threshold": 7.980924606323242,
+        "link_density_penalty": 1.3692681789398191
+      },
+      "text_length": 812
+    },
+    {
+      "timestamp": "2026-05-20T05:42:31.637581416Z",
+      "quality_score": 0.8463415,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.717926025390625,
+        "min_word_threshold": 8.306952476501465,
+        "stopword_weight": 2.017357349395752,
+        "sibling_extension": 0.7684500217437744,
+        "paragraph_boost": 1.2027549743652344,
+        "depth_penalty": 0.01886969804763794
+      },
+      "text_length": 827
+    },
+    {
+      "timestamp": "2026-05-20T05:43:43.756672978Z",
+      "quality_score": 0.8147541,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.2490034103393557,
+        "min_word_threshold": 7.457571983337402,
+        "sibling_extension": 0.6712048649787903,
+        "depth_penalty": 0.1059023141860962,
+        "link_density_penalty": 1.6484975814819336,
+        "stopword_weight": 1.4980725049972534
+      },
+      "text_length": 842
+    },
+    {
+      "timestamp": "2026-05-20T05:44:28.963949019Z",
+      "quality_score": 0.828655,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "min_word_threshold": 5.7483367919921875,
+        "link_density_penalty": 2.259979009628296,
+        "paragraph_boost": 1.1891801357269287,
+        "stopword_weight": 1.6690901517868042,
+        "depth_penalty": 0.1908033788204193,
+        "sibling_extension": 0.5116546154022217
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-20T06:00:46.244620331Z",
+      "quality_score": 0.855914,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "min_word_threshold": 6.166952133178711,
+        "stopword_weight": 1.748793125152588,
+        "sibling_extension": 0.5093620419502258,
+        "paragraph_boost": 0.8368222117424011,
+        "depth_penalty": 0.10699628293514252,
+        "link_density_penalty": 1.333636999130249
+      },
+      "text_length": 837
+    },
+    {
+      "timestamp": "2026-05-20T06:09:40.847146020Z",
+      "quality_score": 0.8228071,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": -0.011895358562469482,
+        "sibling_extension": 0.7617908716201782,
+        "paragraph_boost": 1.1426234245300293,
+        "stopword_weight": 2.0244550704956055,
+        "link_density_penalty": 2.334864377975464,
+        "min_word_threshold": 5.255646705627441
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-20T06:10:04.285506602Z",
+      "quality_score": 0.82232416,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.6967811584472656,
+        "stopword_weight": 1.164548397064209,
+        "depth_penalty": -0.13543039560317993,
+        "paragraph_boost": 1.0863643884658811,
+        "min_word_threshold": 8.451333999633789,
+        "sibling_extension": 0.9522061347961426
+      },
+      "text_length": 762
+    },
+    {
+      "timestamp": "2026-05-20T06:17:26.042307479Z",
+      "quality_score": 0.83793104,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.6881840229034424,
+        "depth_penalty": 0.07670073211193085,
+        "sibling_extension": 0.4494982957839966,
+        "stopword_weight": 2.0162246227264404,
+        "min_word_threshold": 11.402196884155272,
+        "paragraph_boost": 1.1508545875549316
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-20T06:17:50.821350001Z",
+      "quality_score": 0.8409214,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.727306604385376,
+        "paragraph_boost": 1.302351474761963,
+        "sibling_extension": 0.7291871309280396,
+        "min_word_threshold": 5.049141883850098,
+        "depth_penalty": 0.2136039435863495,
+        "link_density_penalty": 2.0617799758911133
+      },
+      "text_length": 863
+    },
+    {
+      "timestamp": "2026-05-20T06:19:02.955433152Z",
+      "quality_score": 0.8530865,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "min_word_threshold": 7.455851554870605,
+        "stopword_weight": 1.2028459310531616,
+        "depth_penalty": 0.2895394563674927,
+        "link_density_penalty": 1.2107534408569336,
+        "sibling_extension": 0.6317186951637268,
+        "paragraph_boost": 1.0666611194610596
+      },
+      "text_length": 924
+    },
+    {
+      "timestamp": "2026-05-20T06:33:45.543631961Z",
+      "quality_score": 0.84245014,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 6.090400218963623,
+        "stopword_weight": 1.2958515882492063,
+        "sibling_extension": 0.5600314140319824,
+        "depth_penalty": 0.07405118644237518,
+        "link_density_penalty": 1.532007336616516,
+        "paragraph_boost": 0.8524388074874878
+      },
+      "text_length": 800
+    },
+    {
+      "timestamp": "2026-05-20T06:38:22.221226336Z",
+      "quality_score": 0.7168385,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 6.739528179168701,
+        "depth_penalty": 0.18134376406669617,
+        "paragraph_boost": 0.9827923774719238,
+        "sibling_extension": 0.8719275593757629,
+        "link_density_penalty": 2.0958950519561768,
+        "stopword_weight": 1.7976516485214231
+      },
+      "text_length": 670
+    },
+    {
+      "timestamp": "2026-05-20T06:42:31.291871366Z",
+      "quality_score": 0.86272967,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.1708783656358719,
+        "stopword_weight": 1.0722742080688477,
+        "min_word_threshold": 4.7835564613342285,
+        "link_density_penalty": 1.9164801836013792,
+        "paragraph_boost": 1.0039634704589844,
+        "sibling_extension": 0.5412030816078186
+      },
+      "text_length": 834
+    },
+    {
+      "timestamp": "2026-05-20T06:51:29.336792336Z",
+      "quality_score": 0.8456583,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "min_word_threshold": 5.970393180847168,
+        "stopword_weight": 1.713481903076172,
+        "paragraph_boost": 1.1937789916992188,
+        "link_density_penalty": 1.8739981651306152,
+        "depth_penalty": 0.24316276609897616,
+        "sibling_extension": 0.6483659148216248
+      },
+      "text_length": 803
+    },
+    {
+      "timestamp": "2026-05-20T06:52:05.606459450Z",
+      "quality_score": 0.839785,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.16703924536705017,
+        "sibling_extension": 0.6913343071937561,
+        "link_density_penalty": 1.7830671072006226,
+        "paragraph_boost": 1.1921918392181396,
+        "min_word_threshold": 7.084118843078613,
+        "stopword_weight": 1.6007801294326782
+      },
+      "text_length": 848
+    },
+    {
+      "timestamp": "2026-05-20T06:53:58.387922388Z",
+      "quality_score": 0.8568628,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.4658286571502686,
+        "min_word_threshold": 6.499362468719482,
+        "depth_penalty": 0.08068577945232391,
+        "paragraph_boost": 0.785871148109436,
+        "link_density_penalty": 1.716742992401123,
+        "sibling_extension": 0.8126649260520935
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-20T07:01:05.438979221Z",
+      "quality_score": 0.8428571,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8063697814941406,
+        "stopword_weight": 1.492663025856018,
+        "paragraph_boost": 1.036390781402588,
+        "depth_penalty": 0.0894877016544342,
+        "link_density_penalty": 1.3194917440414429,
+        "min_word_threshold": 5.737451553344727
+      },
+      "text_length": 761
+    },
+    {
+      "timestamp": "2026-05-20T13:54:05.794048077Z",
+      "quality_score": 0.8454546,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8639649152755737,
+        "stopword_weight": 1.3569557666778564,
+        "depth_penalty": 0.16787055134773254,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375,
+        "link_density_penalty": 1.228914737701416
+      },
+      "text_length": 739
+    },
+    {
+      "timestamp": "2026-05-20T14:04:07.911300609Z",
+      "quality_score": 0.84325063,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.9363861083984375,
+        "link_density_penalty": 1.228914737701416,
+        "stopword_weight": 1.3569557666778564,
+        "sibling_extension": 0.8639649152755737,
+        "min_word_threshold": 7.419589519500732,
+        "depth_penalty": 0.16787055134773254
+      },
+      "text_length": 816
+    },
+    {
+      "timestamp": "2026-05-20T14:06:05.536112250Z",
+      "quality_score": 0.6764368,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.9363861083984375,
+        "min_word_threshold": 7.419589519500732,
+        "depth_penalty": 0.16787055134773254,
+        "sibling_extension": 0.8639649152755737,
+        "stopword_weight": 1.3569557666778564,
+        "link_density_penalty": 1.228914737701416
+      },
+      "text_length": 812
+    },
+    {
+      "timestamp": "2026-05-20T14:07:28.359243711Z",
+      "quality_score": 0.8463415,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8639649152755737,
+        "depth_penalty": 0.16787055134773254,
+        "stopword_weight": 1.3569557666778564,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375,
+        "link_density_penalty": 1.228914737701416
+      },
+      "text_length": 827
+    },
+    {
+      "timestamp": "2026-05-20T14:09:05.927912914Z",
+      "quality_score": 0.8147541,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.228914737701416,
+        "min_word_threshold": 7.419589519500732,
+        "sibling_extension": 0.8639649152755737,
+        "paragraph_boost": 1.9363861083984375,
+        "depth_penalty": 0.16787055134773254,
+        "stopword_weight": 1.3569557666778564
+      },
+      "text_length": 842
+    },
+    {
+      "timestamp": "2026-05-20T14:10:10.214777892Z",
+      "quality_score": 0.828655,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8639649152755737,
+        "paragraph_boost": 1.9363861083984375,
+        "link_density_penalty": 1.228914737701416,
+        "min_word_threshold": 7.419589519500732,
+        "depth_penalty": 0.16787055134773254,
+        "stopword_weight": 1.3569557666778564
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-20T14:32:18.782116739Z",
+      "quality_score": 0.855914,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.16787055134773254,
+        "stopword_weight": 1.3569557666778564,
+        "link_density_penalty": 1.228914737701416,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375,
+        "sibling_extension": 0.8639649152755737
+      },
+      "text_length": 837
+    },
+    {
+      "timestamp": "2026-05-20T14:44:20.902772095Z",
+      "quality_score": 0.8228071,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 2.533761978149414,
+        "sibling_extension": 0.5537405014038086,
+        "depth_penalty": 0.49025416374206543,
+        "paragraph_boost": 1.779890060424805,
+        "link_density_penalty": 1.9943585395812988,
+        "stopword_weight": 1.0995749235153198
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-20T14:44:53.820738740Z",
+      "quality_score": 0.82232416,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8639649152755737,
+        "depth_penalty": 0.16787055134773254,
+        "link_density_penalty": 1.228914737701416,
+        "stopword_weight": 1.3569557666778564,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375
+      },
+      "text_length": 762
+    },
+    {
+      "timestamp": "2026-05-20T14:54:56.863970610Z",
+      "quality_score": 0.83793104,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.16787055134773254,
+        "link_density_penalty": 1.228914737701416,
+        "sibling_extension": 0.8639649152755737,
+        "stopword_weight": 1.3569557666778564,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-20T14:55:29.876862472Z",
+      "quality_score": 0.8409214,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.4496517181396485,
+        "min_word_threshold": 5.662773132324219,
+        "sibling_extension": 0.14026892185211182,
+        "stopword_weight": 1.4730827808380127,
+        "paragraph_boost": 1.2024431228637695,
+        "depth_penalty": 0.4466551542282105
+      },
+      "text_length": 863
+    },
+    {
+      "timestamp": "2026-05-20T14:57:09.045415278Z",
+      "quality_score": 0.8530865,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.9363861083984375,
+        "stopword_weight": 1.3569557666778564,
+        "sibling_extension": 0.8639649152755737,
+        "depth_penalty": 0.16787055134773254,
+        "min_word_threshold": 7.419589519500732,
+        "link_density_penalty": 1.228914737701416
+      },
+      "text_length": 924
+    },
+    {
+      "timestamp": "2026-05-20T15:16:44.584969227Z",
+      "quality_score": 0.84245014,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 7.419589519500732,
+        "sibling_extension": 0.8639649152755737,
+        "paragraph_boost": 1.9363861083984375,
+        "link_density_penalty": 1.228914737701416,
+        "depth_penalty": 0.16787055134773254,
+        "stopword_weight": 1.3569557666778564
+      },
+      "text_length": 800
+    },
+    {
+      "timestamp": "2026-05-20T15:23:01.789915593Z",
+      "quality_score": 0.7168385,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.8639649152755737,
+        "depth_penalty": 0.16787055134773254,
+        "link_density_penalty": 1.228914737701416,
+        "paragraph_boost": 1.9363861083984375,
+        "stopword_weight": 1.3569557666778564,
+        "min_word_threshold": 7.419589519500732
+      },
+      "text_length": 670
+    },
+    {
+      "timestamp": "2026-05-20T15:28:22.145348134Z",
+      "quality_score": 0.86272967,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.9363861083984375,
+        "min_word_threshold": 7.419589519500732,
+        "link_density_penalty": 1.228914737701416,
+        "stopword_weight": 1.3569557666778564,
+        "sibling_extension": 0.8639649152755737,
+        "depth_penalty": 0.16787055134773254
+      },
+      "text_length": 834
+    },
+    {
+      "timestamp": "2026-05-20T15:40:34.662267285Z",
+      "quality_score": 0.8456583,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.9363861083984375,
+        "depth_penalty": 0.16787055134773254,
+        "sibling_extension": 0.8639649152755737,
+        "link_density_penalty": 1.228914737701416,
+        "min_word_threshold": 7.419589519500732,
+        "stopword_weight": 1.3569557666778564
+      },
+      "text_length": 803
+    },
+    {
+      "timestamp": "2026-05-20T15:41:24.435662704Z",
+      "quality_score": 0.839785,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.777733564376831,
+        "min_word_threshold": 2.70364761352539,
+        "stopword_weight": 0.8676882982254028,
+        "depth_penalty": 0.4948576092720032,
+        "paragraph_boost": 1.4412574768066406,
+        "link_density_penalty": 1.4469261169433594
+      },
+      "text_length": 848
+    },
+    {
+      "timestamp": "2026-05-20T15:44:10.203746391Z",
+      "quality_score": 0.8568628,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.228914737701416,
+        "stopword_weight": 1.3569557666778564,
+        "sibling_extension": 0.8639649152755737,
+        "min_word_threshold": 7.419589519500732,
+        "paragraph_boost": 1.9363861083984375,
+        "depth_penalty": 0.16787055134773254
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-20T15:54:38.694529050Z",
+      "quality_score": 0.8428571,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 7.419589519500732,
+        "link_density_penalty": 1.228914737701416,
+        "depth_penalty": 0.16787055134773254,
+        "sibling_extension": 0.8639649152755737,
+        "stopword_weight": 1.3569557666778564,
+        "paragraph_boost": 1.9363861083984375
+      },
+      "text_length": 761
+    },
+    {
+      "timestamp": "2026-05-23T16:34:29.773036084Z",
+      "quality_score": 0.8454546,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.10000091791152954,
+        "link_density_penalty": 1.855892539024353,
+        "paragraph_boost": 1.0752344131469729,
+        "min_word_threshold": 6.54010534286499,
+        "stopword_weight": 1.6741540431976318,
+        "sibling_extension": 0.7144561409950256
+      },
+      "text_length": 739
+    },
+    {
+      "timestamp": "2026-05-23T16:40:21.368225501Z",
+      "quality_score": 0.84325063,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.0752344131469729,
+        "depth_penalty": 0.10000091791152954,
+        "stopword_weight": 1.6741540431976318,
+        "link_density_penalty": 1.855892539024353,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499
+      },
+      "text_length": 816
+    },
+    {
+      "timestamp": "2026-05-23T16:41:30.097232152Z",
+      "quality_score": 0.6764368,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.855892539024353,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499,
+        "depth_penalty": 0.10000091791152954,
+        "paragraph_boost": 1.0752344131469729,
+        "stopword_weight": 1.6741540431976318
+      },
+      "text_length": 812
+    },
+    {
+      "timestamp": "2026-05-23T16:42:23.173507876Z",
+      "quality_score": 0.8463415,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499,
+        "depth_penalty": 0.10000091791152954,
+        "link_density_penalty": 1.855892539024353,
+        "paragraph_boost": 1.0752344131469729
+      },
+      "text_length": 827
+    },
+    {
+      "timestamp": "2026-05-23T16:43:26.716349062Z",
+      "quality_score": 0.8147541,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.0752344131469729,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499,
+        "link_density_penalty": 1.855892539024353,
+        "depth_penalty": 0.10000091791152954,
+        "stopword_weight": 1.6741540431976318
+      },
+      "text_length": 842
+    },
+    {
+      "timestamp": "2026-05-23T16:44:09.190498117Z",
+      "quality_score": 0.828655,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.10000091791152954,
+        "link_density_penalty": 1.855892539024353,
+        "min_word_threshold": 6.54010534286499,
+        "sibling_extension": 0.7144561409950256,
+        "paragraph_boost": 1.0752344131469729,
+        "stopword_weight": 1.6741540431976318
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-23T16:58:38.227239726Z",
+      "quality_score": 0.855914,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "sibling_extension": 0.7144561409950256,
+        "link_density_penalty": 1.855892539024353,
+        "depth_penalty": 0.10000091791152954,
+        "paragraph_boost": 1.0752344131469729,
+        "min_word_threshold": 6.54010534286499
+      },
+      "text_length": 837
+    },
+    {
+      "timestamp": "2026-05-23T17:06:09.521870241Z",
+      "quality_score": 0.8228071,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 6.54010534286499,
+        "paragraph_boost": 1.0752344131469729,
+        "link_density_penalty": 1.855892539024353,
+        "depth_penalty": 0.10000091791152954,
+        "sibling_extension": 0.7144561409950256,
+        "stopword_weight": 1.6741540431976318
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-23T17:06:28.945790166Z",
+      "quality_score": 0.82232416,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.855892539024353,
+        "sibling_extension": 0.7144561409950256,
+        "depth_penalty": 0.10000091791152954,
+        "min_word_threshold": 6.54010534286499,
+        "stopword_weight": 1.6741540431976318,
+        "paragraph_boost": 1.0752344131469729
+      },
+      "text_length": 762
+    },
+    {
+      "timestamp": "2026-05-23T17:12:39.265118924Z",
+      "quality_score": 0.83793104,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "link_density_penalty": 1.855892539024353,
+        "depth_penalty": 0.10000091791152954,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499,
+        "paragraph_boost": 1.0752344131469729
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-05-23T17:12:58.919143453Z",
+      "quality_score": 0.8409214,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "link_density_penalty": 1.855892539024353,
+        "paragraph_boost": 1.0752344131469729,
+        "min_word_threshold": 6.54010534286499,
+        "depth_penalty": 0.10000091791152954,
+        "sibling_extension": 0.7144561409950256
+      },
+      "text_length": 863
+    },
+    {
+      "timestamp": "2026-05-23T17:13:59.376514786Z",
+      "quality_score": 0.8530865,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "sibling_extension": 0.7144561409950256,
+        "paragraph_boost": 1.0752344131469729,
+        "link_density_penalty": 1.855892539024353,
+        "min_word_threshold": 6.54010534286499,
+        "depth_penalty": 0.10000091791152954
+      },
+      "text_length": 924
+    },
+    {
+      "timestamp": "2026-05-23T17:25:48.209164065Z",
+      "quality_score": 0.84245014,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.10000091791152954,
+        "min_word_threshold": 6.54010534286499,
+        "link_density_penalty": 1.855892539024353,
+        "stopword_weight": 1.6741540431976318,
+        "paragraph_boost": 1.0752344131469729,
+        "sibling_extension": 0.7144561409950256
+      },
+      "text_length": 800
+    },
+    {
+      "timestamp": "2026-05-23T17:29:35.872683590Z",
+      "quality_score": 0.7168385,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.855892539024353,
+        "min_word_threshold": 6.54010534286499,
+        "paragraph_boost": 1.0752344131469729,
+        "stopword_weight": 1.6741540431976318,
+        "depth_penalty": 0.10000091791152954,
+        "sibling_extension": 0.7144561409950256
+      },
+      "text_length": 670
+    },
+    {
+      "timestamp": "2026-05-23T17:32:50.379891326Z",
+      "quality_score": 0.86272967,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.0752344131469729,
+        "sibling_extension": 0.7144561409950256,
+        "stopword_weight": 1.6741540431976318,
+        "depth_penalty": 0.10000091791152954,
+        "link_density_penalty": 1.855892539024353,
+        "min_word_threshold": 6.54010534286499
+      },
+      "text_length": 834
+    },
+    {
+      "timestamp": "2026-05-23T17:40:16.745469410Z",
+      "quality_score": 0.8456583,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.10000091791152954,
+        "link_density_penalty": 1.855892539024353,
+        "paragraph_boost": 1.0752344131469729,
+        "min_word_threshold": 6.54010534286499,
+        "sibling_extension": 0.7144561409950256,
+        "stopword_weight": 1.6741540431976318
+      },
+      "text_length": 803
+    },
+    {
+      "timestamp": "2026-05-23T17:40:46.277237270Z",
+      "quality_score": 0.839785,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.855892539024353,
+        "sibling_extension": 0.7144561409950256,
+        "min_word_threshold": 6.54010534286499,
+        "paragraph_boost": 1.0752344131469729,
+        "stopword_weight": 1.6741540431976318,
+        "depth_penalty": 0.10000091791152954
+      },
+      "text_length": 848
+    },
+    {
+      "timestamp": "2026-05-23T17:42:26.225816949Z",
+      "quality_score": 0.8568628,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 1.6741540431976318,
+        "min_word_threshold": 6.54010534286499,
+        "sibling_extension": 0.7144561409950256,
+        "depth_penalty": 0.10000091791152954,
+        "paragraph_boost": 1.0752344131469729,
+        "link_density_penalty": 1.855892539024353
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-05-23T17:48:45.176384817Z",
+      "quality_score": 0.8428571,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.855892539024353,
+        "paragraph_boost": 1.0752344131469729,
+        "min_word_threshold": 6.54010534286499,
+        "stopword_weight": 1.6741540431976318,
+        "depth_penalty": 0.10000091791152954,
+        "sibling_extension": 0.7144561409950256
+      },
+      "text_length": 761
+    },
+    {
+      "timestamp": "2026-06-01T21:08:29.196706692Z",
+      "quality_score": 0.855914,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983,
+        "depth_penalty": 0.3034646809101105,
+        "paragraph_boost": 1.203172206878662,
+        "min_word_threshold": 9.859365463256836,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 837
+    },
+    {
+      "timestamp": "2026-06-01T21:14:36.572083106Z",
+      "quality_score": 0.8228071,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.3034646809101105,
+        "link_density_penalty": 0.15118545293807983,
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492,
+        "paragraph_boost": 1.203172206878662,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-06-01T21:14:53.558302397Z",
+      "quality_score": 0.82232416,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.200206995010376,
+        "sibling_extension": 0.6183936595916748,
+        "link_density_penalty": 0.1488553285598755,
+        "depth_penalty": 0.3054884672164917,
+        "min_word_threshold": 9.854368209838867,
+        "stopword_weight": 1.0017023086547852
+      },
+      "text_length": 762
+    },
+    {
+      "timestamp": "2026-06-01T21:20:05.225309275Z",
+      "quality_score": 0.83793104,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.1786800622940063,
+        "min_word_threshold": 9.831060409545898,
+        "stopword_weight": 1.0128639936447144,
+        "link_density_penalty": 0.11823606491088867,
+        "sibling_extension": 0.5872435569763184,
+        "depth_penalty": 0.3228594660758972
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-06-01T21:20:22.278865315Z",
+      "quality_score": 0.8409214,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.15118545293807983,
+        "min_word_threshold": 9.859365463256836,
+        "paragraph_boost": 1.203172206878662,
+        "stopword_weight": 0.9960966110229492,
+        "depth_penalty": 0.3034646809101105,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 863
+    },
+    {
+      "timestamp": "2026-06-01T21:21:12.198287424Z",
+      "quality_score": 0.8530865,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "sibling_extension": 0.6226122379302979,
+        "link_density_penalty": 0.15118545293807983,
+        "paragraph_boost": 1.203172206878662,
+        "stopword_weight": 0.9960966110229492
+      },
+      "text_length": 924
+    },
+    {
+      "timestamp": "2026-06-01T21:30:53.302677529Z",
+      "quality_score": 0.84245014,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983,
+        "sibling_extension": 0.6226122379302979,
+        "paragraph_boost": 1.203172206878662,
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836
+      },
+      "text_length": 800
+    },
+    {
+      "timestamp": "2026-06-01T21:34:06.881234699Z",
+      "quality_score": 0.7168385,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.14505064487457275,
+        "sibling_extension": 0.6133695840835571,
+        "stopword_weight": 1.0136733055114746,
+        "paragraph_boost": 1.1977295875549316,
+        "min_word_threshold": 9.8487548828125,
+        "depth_penalty": 0.30727145075798035
+      },
+      "text_length": 670
+    },
+    {
+      "timestamp": "2026-06-01T21:36:47.353827013Z",
+      "quality_score": 0.86272967,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.6226122379302979,
+        "paragraph_boost": 1.203172206878662,
+        "link_density_penalty": 0.15118545293807983,
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492
+      },
+      "text_length": 834
+    },
+    {
+      "timestamp": "2026-06-01T21:43:00.608573017Z",
+      "quality_score": 0.8456583,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.203172206878662,
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105
+      },
+      "text_length": 803
+    },
+    {
+      "timestamp": "2026-06-01T21:43:25.661657429Z",
+      "quality_score": 0.839785,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "link_density_penalty": 0.15118545293807983,
+        "stopword_weight": 0.9960966110229492,
+        "paragraph_boost": 1.203172206878662,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105
+      },
+      "text_length": 848
+    },
+    {
+      "timestamp": "2026-06-01T21:44:50.265829369Z",
+      "quality_score": 0.8568628,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.203172206878662,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "link_density_penalty": 0.15118545293807983,
+        "stopword_weight": 0.9960966110229492
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-06-01T21:50:01.387330818Z",
+      "quality_score": 0.8428571,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "paragraph_boost": 1.203172206878662,
+        "depth_penalty": 0.3034646809101105,
+        "stopword_weight": 0.9960966110229492,
+        "sibling_extension": 0.6226122379302979,
+        "link_density_penalty": 0.15118545293807983
+      },
+      "text_length": 761
+    },
+    {
+      "timestamp": "2026-06-02T01:52:51.933474652Z",
+      "quality_score": 0.8228071,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "paragraph_boost": 1.203172206878662,
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-06-02T01:53:09.502074451Z",
+      "quality_score": 0.82232416,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105,
+        "link_density_penalty": 0.15118545293807983,
+        "stopword_weight": 0.9960966110229492,
+        "paragraph_boost": 1.203172206878662
+      },
+      "text_length": 762
+    },
+    {
+      "timestamp": "2026-06-02T01:58:29.935628018Z",
+      "quality_score": 0.83793104,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492,
+        "depth_penalty": 0.3034646809101105,
+        "paragraph_boost": 1.203172206878662,
+        "link_density_penalty": 0.15118545293807983,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 806
+    },
+    {
+      "timestamp": "2026-06-02T01:58:47.577108027Z",
+      "quality_score": 0.8409214,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.15118545293807983,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105,
+        "paragraph_boost": 1.203172206878662,
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492
+      },
+      "text_length": 863
+    },
+    {
+      "timestamp": "2026-06-02T01:59:39.550052401Z",
+      "quality_score": 0.8530865,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.5872435569763184,
+        "depth_penalty": 0.3228594660758972,
+        "link_density_penalty": 0.11823606491088867,
+        "min_word_threshold": 9.831060409545898,
+        "paragraph_boost": 1.1786800622940063,
+        "stopword_weight": 1.0128639936447144
+      },
+      "text_length": 924
+    },
+    {
+      "timestamp": "2026-06-02T02:10:08.626515226Z",
+      "quality_score": 0.84245014,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.203172206878662,
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983,
+        "min_word_threshold": 9.859365463256836,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105
+      },
+      "text_length": 800
+    },
+    {
+      "timestamp": "2026-06-02T02:13:30.986412918Z",
+      "quality_score": 0.7168385,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "stopword_weight": 0.9960966110229492,
+        "sibling_extension": 0.6226122379302979,
+        "link_density_penalty": 0.15118545293807983,
+        "depth_penalty": 0.3034646809101105,
+        "paragraph_boost": 1.203172206878662
+      },
+      "text_length": 670
+    },
+    {
+      "timestamp": "2026-06-02T02:16:29.702096700Z",
+      "quality_score": 0.86272967,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "link_density_penalty": 0.15118545293807983,
+        "stopword_weight": 0.9960966110229492,
+        "paragraph_boost": 1.203172206878662,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 834
+    },
+    {
+      "timestamp": "2026-06-02T02:24:16.711450690Z",
+      "quality_score": 0.8456583,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 9.859365463256836,
+        "paragraph_boost": 1.203172206878662,
+        "depth_penalty": 0.3034646809101105,
+        "sibling_extension": 0.6226122379302979,
+        "stopword_weight": 0.9960966110229492,
+        "link_density_penalty": 0.15118545293807983
+      },
+      "text_length": 803
+    },
+    {
+      "timestamp": "2026-06-02T02:24:50.621194197Z",
+      "quality_score": 0.839785,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.203172206878662,
+        "min_word_threshold": 9.859365463256836,
+        "link_density_penalty": 0.15118545293807983,
+        "stopword_weight": 0.9960966110229492,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105
+      },
+      "text_length": 848
+    },
+    {
+      "timestamp": "2026-06-02T02:26:25.617817185Z",
+      "quality_score": 0.8568628,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.15118545293807983,
+        "paragraph_boost": 1.203172206878662,
+        "min_word_threshold": 9.859365463256836,
+        "sibling_extension": 0.6226122379302979,
+        "depth_penalty": 0.3034646809101105,
+        "stopword_weight": 0.9960966110229492
+      },
+      "text_length": 788
+    },
+    {
+      "timestamp": "2026-06-02T02:32:25.398065356Z",
+      "quality_score": 0.8428571,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "stopword_weight": 0.9960966110229492,
+        "depth_penalty": 0.3034646809101105,
+        "min_word_threshold": 9.859365463256836,
+        "link_density_penalty": 0.15118545293807983,
+        "paragraph_boost": 1.203172206878662,
+        "sibling_extension": 0.6226122379302979
+      },
+      "text_length": 761
+    }
+  ],
+  "successful_xpaths": {
+    "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[2]/article[1]": 3,
+    "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[2]/article[1]": 4,
+    "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[4]/article[1]": 3,
+    "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[4]/article[1]": 6,
+    "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[6]/div[1]/ul[1]/li[1]/article[1]": 3,
+    "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[2]/article[1]": 4,
+    "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[2]/div[1]/div[7]/div[1]/ul[1]/li[1]/article[1]": 6,
+    "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]": 43,
+    "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[3]/article[1]": 7
+  },
+  "avg_parameters": {
+    "sibling_extension": [
+      0.5484004020690918,
+      0.4136955738067627,
+      0.7684500217437744,
+      0.6712048649787903,
+      0.5116546154022217,
+      0.5093620419502258,
+      0.7617908716201782,
+      0.9522061347961426,
+      0.4494982957839966,
+      0.7291871309280396,
+      0.6317186951637268,
+      0.5600314140319824,
+      0.8719275593757629,
+      0.5412030816078186,
+      0.6483659148216248,
+      0.6913343071937561,
+      0.8126649260520935,
+      0.8063697814941406,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.5537405014038086,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.14026892185211182,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.777733564376831,
+      0.8639649152755737,
+      0.8639649152755737,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.7144561409950256,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6183936595916748,
+      0.5872435569763184,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6133695840835571,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.5872435569763184,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979,
+      0.6226122379302979
+    ],
+    "min_word_threshold": [
+      7.8376970291137695,
+      9.285250663757324,
+      8.306952476501465,
+      7.457571983337402,
+      5.7483367919921875,
+      6.166952133178711,
+      5.255646705627441,
+      8.451333999633789,
+      11.402196884155272,
+      5.049141883850098,
+      7.455851554870605,
+      6.090400218963623,
+      6.739528179168701,
+      4.7835564613342285,
+      5.970393180847168,
+      7.084118843078613,
+      6.499362468719482,
+      5.737451553344727,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      2.533761978149414,
+      7.419589519500732,
+      7.419589519500732,
+      5.662773132324219,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      7.419589519500732,
+      2.70364761352539,
+      7.419589519500732,
+      7.419589519500732,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      6.54010534286499,
+      9.859365463256836,
+      9.859365463256836,
+      9.854368209838867,
+      9.831060409545898,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.8487548828125,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.831060409545898,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836,
+      9.859365463256836
+    ],
+    "paragraph_boost": [
+      1.1836369037628174,
+      1.1539604663848877,
+      1.2027549743652344,
+      1.2490034103393557,
+      1.1891801357269287,
+      0.8368222117424011,
+      1.1426234245300293,
+      1.0863643884658811,
+      1.1508545875549316,
+      1.302351474761963,
+      1.0666611194610596,
+      0.8524388074874878,
+      0.9827923774719238,
+      1.0039634704589844,
+      1.1937789916992188,
+      1.1921918392181396,
+      0.785871148109436,
+      1.036390781402588,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.779890060424805,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.2024431228637695,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.4412574768066406,
+      1.9363861083984375,
+      1.9363861083984375,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.0752344131469729,
+      1.203172206878662,
+      1.203172206878662,
+      1.200206995010376,
+      1.1786800622940063,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.1977295875549316,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.1786800622940063,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662,
+      1.203172206878662
+    ],
+    "link_density_penalty": [
+      1.720478057861328,
+      1.6638846397399902,
+      1.717926025390625,
+      1.6484975814819336,
+      2.259979009628296,
+      1.333636999130249,
+      2.334864377975464,
+      1.6967811584472656,
+      1.6881840229034424,
+      2.0617799758911133,
+      1.2107534408569336,
+      1.532007336616516,
+      2.0958950519561768,
+      1.9164801836013792,
+      1.8739981651306152,
+      1.7830671072006226,
+      1.716742992401123,
+      1.3194917440414429,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.9943585395812988,
+      1.228914737701416,
+      1.228914737701416,
+      0.4496517181396485,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.228914737701416,
+      1.4469261169433594,
+      1.228914737701416,
+      1.228914737701416,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      1.855892539024353,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.1488553285598755,
+      0.11823606491088867,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.14505064487457275,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.11823606491088867,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983,
+      0.15118545293807983
+    ],
+    "depth_penalty": [
+      0.20712636411190033,
+      0.1099729984998703,
+      0.01886969804763794,
+      0.1059023141860962,
+      0.1908033788204193,
+      0.10699628293514252,
+      -0.011895358562469482,
+      -0.13543039560317993,
+      0.07670073211193085,
+      0.2136039435863495,
+      0.2895394563674927,
+      0.07405118644237518,
+      0.18134376406669617,
+      0.1708783656358719,
+      0.24316276609897616,
+      0.16703924536705017,
+      0.08068577945232391,
+      0.0894877016544342,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.49025416374206543,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.4466551542282105,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.4948576092720032,
+      0.16787055134773254,
+      0.16787055134773254,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.10000091791152954,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3054884672164917,
+      0.3228594660758972,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.30727145075798035,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3228594660758972,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105,
+      0.3034646809101105
+    ],
+    "stopword_weight": [
+      2.404600143432617,
+      1.5954887866973877,
+      2.017357349395752,
+      1.4980725049972534,
+      1.6690901517868042,
+      1.748793125152588,
+      2.0244550704956055,
+      1.164548397064209,
+      2.0162246227264404,
+      1.727306604385376,
+      1.2028459310531616,
+      1.2958515882492063,
+      1.7976516485214231,
+      1.0722742080688477,
+      1.713481903076172,
+      1.6007801294326782,
+      1.4658286571502686,
+      1.492663025856018,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.0995749235153198,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.4730827808380127,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.3569557666778564,
+      0.8676882982254028,
+      1.3569557666778564,
+      1.3569557666778564,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      1.6741540431976318,
+      0.9960966110229492,
+      0.9960966110229492,
+      1.0017023086547852,
+      1.0128639936447144,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      1.0136733055114746,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      1.0128639936447144,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492,
+      0.9960966110229492
+    ]
+  },
+  "quality_scores": [
+    0.8454546,
+    0.84325063,
+    0.6764368,
+    0.8463415,
+    0.8147541,
+    0.828655,
+    0.855914,
+    0.8228071,
+    0.82232416,
+    0.83793104,
+    0.8409214,
+    0.8530865,
+    0.84245014,
+    0.7168385,
+    0.86272967,
+    0.8456583,
+    0.839785,
+    0.8568628,
+    0.8428571,
+    0.8454546,
+    0.84325063,
+    0.6764368,
+    0.8463415,
+    0.8147541,
+    0.828655,
+    0.855914,
+    0.8228071,
+    0.82232416,
+    0.83793104,
+    0.8409214,
+    0.8530865,
+    0.84245014,
+    0.7168385,
+    0.86272967,
+    0.8456583,
+    0.839785,
+    0.8568628,
+    0.8428571,
+    0.8454546,
+    0.84325063,
+    0.6764368,
+    0.8463415,
+    0.8147541,
+    0.828655,
+    0.855914,
+    0.8228071,
+    0.82232416,
+    0.83793104,
+    0.8409214,
+    0.8530865,
+    0.84245014,
+    0.7168385,
+    0.86272967,
+    0.8456583,
+    0.839785,
+    0.8568628,
+    0.8428571,
+    0.855914,
+    0.8228071,
+    0.82232416,
+    0.83793104,
+    0.8409214,
+    0.8530865,
+    0.84245014,
+    0.7168385,
+    0.86272967,
+    0.8456583,
+    0.839785,
+    0.8568628,
+    0.8428571,
+    0.8228071,
+    0.82232416,
+    0.83793104,
+    0.8409214,
+    0.8530865,
+    0.84245014,
+    0.7168385,
+    0.86272967,
+    0.8456583,
+    0.839785,
+    0.8568628,
+    0.8428571
+  ],
+  "last_updated": "2026-06-02T02:32:25.398070623Z"
+}

@@ -36,9 +36,13 @@ enum Commands {
         #[arg(short, long)]
         url: String,
 
-        /// Path to trained model
+        /// Path to trained RL model
         #[arg(short, long)]
         model: Option<PathBuf>,
+
+        /// Path to a trained node classifier (.safetensors); used when no RL model is given
+        #[arg(long)]
+        classifier: Option<PathBuf>,
 
         /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
         #[arg(long, default_value = "dqn")]
@@ -59,9 +63,13 @@ enum Commands {
         #[arg(short, long)]
         archive_dir: PathBuf,
 
-        /// Path to trained model
+        /// Path to trained RL model
         #[arg(short, long)]
         model: Option<PathBuf>,
+
+        /// Path to a trained node classifier (.safetensors); used when no RL model is given
+        #[arg(long)]
+        classifier: Option<PathBuf>,
 
         /// Algorithm to use (dqn, ppo, sac, td3, rainbow)
         #[arg(long, default_value = "dqn")]
@@ -78,6 +86,29 @@ enum Commands {
         /// Batch size for processing
         #[arg(long, default_value = "2048")]
         batch_size: usize,
+    },
+
+    /// Train the supervised content-node classifier (hybrid selector)
+    TrainClassifier {
+        /// Training data directory (HTML + paired JSON with ground-truth `text`)
+        #[arg(short, long)]
+        data_dir: PathBuf,
+
+        /// Output path for the trained classifier (.safetensors)
+        #[arg(short, long, default_value = "models/node_classifier.safetensors")]
+        output: PathBuf,
+
+        /// Number of full-batch training epochs
+        #[arg(short = 'e', long, default_value = "300")]
+        epochs: usize,
+
+        /// Learning rate
+        #[arg(long, default_value = "0.01")]
+        learning_rate: f64,
+
+        /// Maximum number of HTML samples to load
+        #[arg(long, default_value = "5000")]
+        max_samples: usize,
     },
 
     /// Train the model
@@ -315,6 +346,7 @@ async fn main() -> Result<()> {
 
     let command_type = match &cli.command {
         Commands::Train { .. } => "train",
+        Commands::TrainClassifier { .. } => "train_classifier",
         Commands::Tune { .. } => "tune",
         Commands::Extract { .. } => "extract",
         Commands::ExtractBatch { .. } => "extract_batch",
@@ -333,11 +365,14 @@ async fn main() -> Result<()> {
     info!("{device_info_str}");
 
     match cli.command {
-        Commands::Extract { html_file, algorithm, url, model, site_profile, output } => {
-            extract_command(html_file, algorithm, url, model, site_profile, output).await?;
+        Commands::Extract { html_file, algorithm, url, model, classifier, site_profile, output } => {
+            extract_command(html_file, algorithm, url, model, classifier, site_profile, output).await?;
         }
-        Commands::ExtractBatch { archive_dir, algorithm, model, output_dir, max_files, batch_size } => {
-            extract_batch_command(archive_dir, algorithm, model, output_dir, max_files, batch_size).await?;
+        Commands::ExtractBatch { archive_dir, algorithm, model, classifier, output_dir, max_files, batch_size } => {
+            extract_batch_command(archive_dir, algorithm, model, classifier, output_dir, max_files, batch_size).await?;
+        }
+        Commands::TrainClassifier { data_dir, output, epochs, learning_rate, max_samples } => {
+            train_classifier_command(data_dir, output, epochs, learning_rate, max_samples).await?;
         }
         Commands::Train {
             data_dir, algorithm, episodes, improved, auto_hyperparams, hyperparams, plot_every,
@@ -378,6 +413,7 @@ async fn extract_command(
     algorithm: String,
     url: String,
     model_path: Option<PathBuf>,
+    classifier_path: Option<PathBuf>,
     _site_profile_path: Option<PathBuf>,
     output: Option<PathBuf>,
 ) -> Result<()> {
@@ -392,13 +428,16 @@ async fn extract_command(
     if let Some(ref model_path) = model_path {
         info!("Using trained model: {}", model_path.display());
         display_model_metadata(model_path);
+    } else if let Some(ref classifier_path) = classifier_path {
+        info!("Using node classifier: {}", classifier_path.display());
     }
-    
+
     config.algorithm = algorithm;
     let article = content_extractor_rl::extract_single(
         &html_file,
         url,
         model_path.as_deref(),
+        classifier_path.as_deref(),
         output.as_deref(),
         &config,
     )?;
@@ -411,6 +450,7 @@ async fn extract_batch_command(
     archive_dir: PathBuf,
     algorithm: String,
     model_path: Option<PathBuf>,
+    classifier_path: Option<PathBuf>,
     output_dir: Option<PathBuf>,
     max_files: Option<usize>,
     batch_size: usize,
@@ -429,11 +469,14 @@ async fn extract_batch_command(
     if let Some(ref model_path) = model_path {
         info!("Using trained model: {}", model_path.display());
         display_model_metadata(model_path);
+    } else if let Some(ref classifier_path) = classifier_path {
+        info!("Using node classifier: {}", classifier_path.display());
     }
 
     let result = content_extractor_rl::extract_batch(
         &archive_dir,
         model_path.as_deref(),
+        classifier_path.as_deref(),
         &output_dir,
         max_files,
         batch_size,
@@ -441,6 +484,45 @@ async fn extract_batch_command(
     )?;
 
     info!("Extracted {} articles", result.articles.len());
+    Ok(())
+}
+
+async fn train_classifier_command(
+    data_dir: PathBuf,
+    output: PathBuf,
+    epochs: usize,
+    learning_rate: f64,
+    max_samples: usize,
+) -> Result<()> {
+    let config = Config::from_env()
+        .map_err(|e| content_extractor_rl::ExtractionError::ParseError(e.to_string()))?;
+
+    info!("Loading training samples (with ground-truth text) from {}", data_dir.display());
+    let samples = load_training_samples(&data_dir, Some(max_samples))?;
+    let labelled = samples.iter().filter(|s| s.ground_truth_text.is_some()).count();
+    info!("Loaded {} samples ({} with ground-truth text)", samples.len(), labelled);
+
+    if labelled == 0 {
+        return Err(content_extractor_rl::ExtractionError::ExtractionFailed(
+            "No samples with ground-truth `text` found — the classifier needs labelled data".to_string(),
+        ));
+    }
+
+    let device = content_extractor_rl::get_device();
+    info!("Training node classifier for {} epochs (lr={})", epochs, learning_rate);
+
+    let (classifier, final_loss) =
+        content_extractor_rl::train_classifier(&samples, &config, epochs, learning_rate, &device)?;
+
+    info!("Training complete. Final BCE loss: {:.4}", final_loss);
+    info!("Classifier parameters: {}", classifier.num_parameters());
+
+    if let Some(parent) = output.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    classifier.save(&output)?;
+    info!("Saved node classifier to {}", output.display());
+
     Ok(())
 }
 
@@ -620,12 +702,17 @@ async fn train_command(
     info!("Max HTML samples: {}", config.max_html_samples);
     info!("{}", separator());
 
-    // Load HTML samples with optimization
+    // Load HTML samples with optimization (includes ground-truth article text
+    // so the RL reward is token F1 against the labelled article).
     info!("Loading HTML samples...");
     let load_start = Instant::now();
-    let html_samples = load_html_samples(&data_dir, Some(config.max_html_samples))?;
+    let html_samples = load_training_samples(&data_dir, Some(config.max_html_samples))?;
     let load_duration = load_start.elapsed();
-    info!("Loaded {} HTML samples in {:.2}s", html_samples.len(), load_duration.as_secs_f64());
+    let labelled = html_samples.iter().filter(|s| s.ground_truth_text.is_some()).count();
+    info!(
+        "Loaded {} HTML samples ({} with ground-truth text) in {:.2}s",
+        html_samples.len(), labelled, load_duration.as_secs_f64()
+    );
 
     if html_samples.is_empty() {
         error!("No HTML samples found in {}", data_dir.display());
@@ -811,7 +898,9 @@ async fn tune_command(
 
             let trial_start = Instant::now();
 
-            let (_agent, metrics) = train_standard(&trial_config, html_samples.clone())?;
+            let trial_samples: Vec<content_extractor_rl::TrainingSample> =
+                html_samples.clone().into_iter().map(Into::into).collect();
+            let (_agent, metrics) = train_standard(&trial_config, trial_samples)?;
 
             let duration = trial_start.elapsed();
 
@@ -1055,6 +1144,60 @@ fn load_html_files_recursive(dir: &PathBuf, max_files: Option<usize>) -> Result<
     }
 
     Ok(files)
+}
+
+/// Load training samples including the ground-truth article text from the
+/// paired JSON files. Used by the `train` command so the RL reward can be token
+/// F1 against the labelled article rather than a self-referential proxy.
+fn load_training_samples(
+    dir: &PathBuf,
+    max_samples: Option<usize>,
+) -> Result<Vec<content_extractor_rl::TrainingSample>> {
+    use content_extractor_rl::TrainingSample;
+
+    let files = load_html_files_recursive(dir, max_samples)?;
+    let mut samples = Vec::new();
+
+    for (html_path, json_path) in files {
+        let content = if html_path.extension().and_then(|s| s.to_str()) == Some("bz2") {
+            let file = std::fs::File::open(&html_path)?;
+            let mut decoder = BzDecoder::new(file);
+            let mut html = String::new();
+            std::io::Read::read_to_string(&mut decoder, &mut html)?;
+            html
+        } else {
+            std::fs::read_to_string(&html_path)?
+        };
+
+        // Pull both the URL and the ground-truth article text from the JSON.
+        let (url, gt_text) = match std::fs::read_to_string(&json_path) {
+            Ok(json_content) => match serde_json::from_str::<serde_json::Value>(&json_content) {
+                Ok(v) => {
+                    let url = v
+                        .get("URL")
+                        .and_then(|u| u.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "https://example.com/unknown".to_string());
+                    let text = v
+                        .get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
+                        .filter(|s| !s.trim().is_empty());
+                    (url, text)
+                }
+                Err(_) => ("https://example.com/invalid-json".to_string(), None),
+            },
+            Err(_) => ("https://example.com/no-json".to_string(), None),
+        };
+
+        let sample = match gt_text {
+            Some(text) => TrainingSample::with_ground_truth(content, url, text),
+            None => TrainingSample::from((content, url)),
+        };
+        samples.push(sample);
+    }
+
+    Ok(samples)
 }
 
 fn load_html_samples(dir: &PathBuf, max_samples: Option<usize>) -> Result<Vec<(String, String)>> {

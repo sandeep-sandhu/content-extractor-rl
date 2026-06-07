@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="sdkName" value="Python 3.12 (pyvenv)" />
+  </component>
+  <component name="CidrRootsConfiguration">
+    <sourceRoots>
+      <file path="$PROJECT_DIR$/site_profiles" />
+    </sourceRoots>
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/.claude" />
+      <file path="$PROJECT_DIR$/logs" />
+      <file path="$PROJECT_DIR$/output" />
+      <file path="$PROJECT_DIR$/temp" />
+    </excludeRoots>
+  </component>
+</project>

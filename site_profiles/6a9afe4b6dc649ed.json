@@ -1,0 +1,40 @@
+{
+  "domain": "hr.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2025-12-24T21:01:56.566998025Z",
+      "quality_score": 0.4093767,
+      "xpath": "/html[1]/body[1]/header[1]/div[2]/div[1]",
+      "parameters": {
+        "sibling_extension": 0.5,
+        "depth_penalty": 0.25,
+        "stopword_weight": 1.25,
+        "paragraph_boost": 1.5,
+        "min_word_threshold": 6.0,
+        "link_density_penalty": 1.0
+      },
+      "text_length": 1081
+    },
+    {
+      "timestamp": "2025-12-25T03:01:41.503938250Z",
+      "quality_score": 0.4093767,
+      "xpath": "/html[1]/body[1]/header[1]/div[1]",
+      "parameters": {
+        "stopword_weight": 1.25,
+        "paragraph_boost": 1.5,
+        "sibling_extension": 0.5,
+        "depth_penalty": 0.25,
+        "link_density_penalty": 1.0,
+        "min_word_threshold": 6.0
+      },
+      "text_length": 1081
+    }
+  ],
+  "successful_xpaths": {},
+  "avg_parameters": {},
+  "quality_scores": [
+    0.4093767,
+    0.4093767
+  ],
+  "last_updated": "2025-12-25T03:01:41.503939493Z"
+}

@@ -1,0 +1,85 @@
+{
+  "domain": "hospitality.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2026-05-20T06:47:18.683502050Z",
+      "quality_score": 0.64166665,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "paragraph_boost": 1.142956256866455,
+        "depth_penalty": 0.2722080945968628,
+        "link_density_penalty": 2.3828201293945312,
+        "min_word_threshold": 6.4469122886657715,
+        "stopword_weight": 1.1621501445770264,
+        "sibling_extension": 0.6259472370147705
+      },
+      "text_length": 537
+    },
+    {
+      "timestamp": "2026-05-20T15:34:52.593151190Z",
+      "quality_score": 0.64166665,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "link_density_penalty": 1.1248563528060913,
+        "depth_penalty": 0.16208623349666595,
+        "min_word_threshold": 7.086010932922363,
+        "stopword_weight": 1.387923002243042,
+        "sibling_extension": 0.8625226020812988,
+        "paragraph_boost": 1.9514858722686768
+      },
+      "text_length": 537
+    },
+    {
+      "timestamp": "2026-05-23T17:36:44.731210135Z",
+      "quality_score": 0.64166665,
+      "xpath": "/html[1]/body[1]/div[3]/header[1]/div[1]/div[3]/div[1]/div[2]/nav[1]/ul[1]/li[2]/div[1]/div[1]/div[2]/div[1]/div[2]/ul[1]/li[1]/article[1]",
+      "parameters": {
+        "min_word_threshold": 6.2462029457092285,
+        "stopword_weight": 1.6555533409118652,
+        "depth_penalty": 0.08093047142028809,
+        "sibling_extension": 0.7751405239105225,
+        "paragraph_boost": 1.0704429149627686,
+        "link_density_penalty": 1.843668222427368
+      },
+      "text_length": 537
+    },
+    {
+      "timestamp": "2026-06-01T21:40:09.724053218Z",
+      "quality_score": 0.64166665,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[9]/div[1]/ul[1]/li[2]/article[1]",
+      "parameters": {
+        "link_density_penalty": 0.12616896629333496,
+        "min_word_threshold": 9.835869789123535,
+        "stopword_weight": 0.9190611243247986,
+        "paragraph_boost": 1.1893374919891357,
+        "sibling_extension": 0.5719688534736633,
+        "depth_penalty": 0.31853729486465454
+      },
+      "text_length": 537
+    },
+    {
+      "timestamp": "2026-06-02T02:20:37.672405627Z",
+      "quality_score": 0.64166665,
+      "xpath": "/html[1]/body[1]/div[3]/div[4]/div[1]/div[2]/div[1]/div[1]/div[2]/div[1]/div[9]/div[1]/ul[1]/li[3]/article[1]",
+      "parameters": {
+        "sibling_extension": 0.5719688534736633,
+        "min_word_threshold": 9.835869789123535,
+        "link_density_penalty": 0.12616896629333496,
+        "stopword_weight": 0.9190611243247986,
+        "paragraph_boost": 1.1893374919891357,
+        "depth_penalty": 0.31853729486465454
+      },
+      "text_length": 537
+    }
+  ],
+  "successful_xpaths": {},
+  "avg_parameters": {},
+  "quality_scores": [
+    0.64166665,
+    0.64166665,
+    0.64166665,
+    0.64166665,
+    0.64166665
+  ],
+  "last_updated": "2026-06-02T02:20:37.672458843Z"
+}

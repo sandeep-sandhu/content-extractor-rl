@@ -35,7 +35,9 @@ pub struct HyperparameterSpace {
 impl Default for HyperparameterSpace {
     fn default() -> Self {
         Self {
-            learning_rate: (1e-5, 1e-2),
+            // Capped at 3e-3: rates above this destabilise SAC/DQN even with
+            // gradient clipping. Sampled log-uniformly (see random_suggest).
+            learning_rate: (1e-5, 3e-3),
             batch_size: vec![256, 512, 1024, 2048, 4096, 6144, 8192],
             gamma: (0.85, 0.99),
             epsilon_decay: (0.985, 0.999),
@@ -251,8 +253,10 @@ impl TPEOptimizer {
 
                 let trial_start = std::time::Instant::now();
 
-                // Run training
-                let result = crate::training::train_standard(&trial_config, html_samples.clone());
+                // Run training (tuning optimizes the text-quality proxy reward)
+                let trial_samples: Vec<crate::TrainingSample> =
+                    html_samples.clone().into_iter().map(Into::into).collect();
+                let result = crate::training::train_standard(&trial_config, trial_samples);
 
                 match result {
                     Ok((_agent, metrics)) => {
@@ -371,8 +375,15 @@ impl TPEOptimizer {
 
         let dropout = rng.random_range(self.space.dropout.0..self.space.dropout.1);
 
+        // Learning rate is sampled log-uniformly: a plain uniform draw over
+        // [1e-5, 1e-2] puts almost all mass on large, unstable rates (this is
+        // what produced the ~5.9e-3 rate that made SAC diverge). Log sampling
+        // explores small rates properly.
+        let (lr_lo, lr_hi) = self.space.learning_rate;
+        let learning_rate = (lr_lo.ln() + rng.random::<f64>() * (lr_hi.ln() - lr_lo.ln())).exp();
+
         Hyperparameters {
-            learning_rate: rng.random_range(self.space.learning_rate.0..self.space.learning_rate.1),
+            learning_rate,
             batch_size: *self.space.batch_size
                 .get(rng.random_range(0..self.space.batch_size.len()))
                 .unwrap(),

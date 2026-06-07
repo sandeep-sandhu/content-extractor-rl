@@ -225,6 +225,62 @@ fn test_sac_entropy_learning() {
 }
 
 #[test]
+fn test_sac_stable_under_high_learning_rate() {
+    // Regression test for the NaN cascade: a deliberately large learning rate
+    // (the failing training run used ~5.9e-3) made the *unclipped* SAC
+    // actor/critic gradients explode to NaN within ~16 updates and permanently
+    // corrupt the weights. With global-norm gradient clipping the agent must
+    // stay finite across many updates and remain usable for inference.
+    let device = Device::Cpu;
+    let config = Config::default();
+
+    let mut agent = AgentFactory::create(
+        AlgorithmType::SAC,
+        config.state_dim,
+        config.num_discrete_actions,
+        config.num_continuous_params,
+        config.gamma as f32,
+        5e-3, // intentionally high
+        &device,
+    )
+    .unwrap();
+
+    let mut rb = PrioritizedReplayBuffer::new(20000, 0.6, 0.4);
+    for i in 0..2000 {
+        let state: Vec<f32> = (0..config.state_dim)
+            .map(|j| (((i + j) as f32) * 0.013).sin())
+            .collect();
+        let next_state: Vec<f32> = (0..config.state_dim)
+            .map(|j| (((i + j + 1) as f32) * 0.013).sin())
+            .collect();
+        rb.add(Experience {
+            state,
+            action: (i % config.num_discrete_actions, vec![0.2f32; config.num_continuous_params]),
+            reward: ((i % 7) as f32) - 3.0,
+            next_state,
+            done: i % 50 == 0,
+        });
+    }
+
+    for step in 0..100 {
+        let loss = agent
+            .train_step(&mut rb, 256)
+            .unwrap_or_else(|e| panic!("train_step errored at step {step}: {e}"));
+        assert!(
+            !loss.is_nan() && !loss.is_infinite(),
+            "loss went non-finite at step {step}: {loss}"
+        );
+    }
+
+    // Weights must still be finite/usable (not NaN-corrupted).
+    let (action, params) = agent
+        .select_action(&vec![0.5f32; config.state_dim], 0.0)
+        .unwrap();
+    assert!(action < config.num_discrete_actions);
+    assert!(params.iter().all(|p| p.is_finite()), "params corrupted: {params:?}");
+}
+
+#[test]
 fn test_sac_continuous_action_bounds() {
     let device = Device::Cpu;
     let config = Config::default();

@@ -10,12 +10,12 @@ use crate::{
 use crate::{
     replay_buffer::PrioritizedReplayBuffer,
     SiteProfileMemory,
-    reward::ImprovedRewardCalculator,
     curriculum::CurriculumManager,
     Result,
 };
 
 use crate::environment::StepInfo;
+use rand::RngExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 use tracing::{info, warn};
@@ -59,6 +59,32 @@ fn extract_domain_from_url(url: &str) -> String {
 }
 
 
+/// A single training example: the page HTML, its URL, and (when available) the
+/// ground-truth article text used to compute a token-F1 reward.
+///
+/// `From<(String, String)>` is provided so existing call sites that only have
+/// `(html, url)` pairs keep working — they simply train against the
+/// self-supervised text-quality proxy (ground truth `None`).
+#[derive(Debug, Clone)]
+pub struct TrainingSample {
+    pub html: String,
+    pub url: String,
+    pub ground_truth_text: Option<String>,
+}
+
+impl TrainingSample {
+    /// Construct a sample with ground-truth article text.
+    pub fn with_ground_truth(html: String, url: String, ground_truth_text: String) -> Self {
+        Self { html, url, ground_truth_text: Some(ground_truth_text) }
+    }
+}
+
+impl From<(String, String)> for TrainingSample {
+    fn from((html, url): (String, String)) -> Self {
+        Self { html, url, ground_truth_text: None }
+    }
+}
+
 /// Training metrics
 #[derive(Debug, Clone, Default)]  // Add Default derive
 pub struct TrainingMetrics {
@@ -72,7 +98,7 @@ pub struct TrainingMetrics {
 /// Standard training loop with checkpoint support
 pub fn train_standard(
     config: &Config,
-    html_samples: Vec<(String, String)>,
+    html_samples: Vec<TrainingSample>,
 ) -> Result<(Box<dyn RLAgent>, TrainingMetrics)> {
     info!("Starting standard training for {} episodes", config.num_episodes);
 
@@ -183,16 +209,23 @@ pub fn train_standard(
     );
 
     for episode in start_episode..config.num_episodes {
-        // Sample HTML
-        let idx = episode % html_samples.len();
-        let (html, url) = &html_samples[idx];
+        // Sample HTML at random to decorrelate consecutive experiences (the
+        // old `episode % len` cycling produced a fixed visitation order).
+        let idx = rand::rng().random_range(0..html_samples.len());
+        let sample = &html_samples[idx];
+        let (html, url) = (&sample.html, &sample.url);
 
         let domain = extract_domain_from_url(url);
 
         let site_profile = site_memory.get_profile(&domain);
 
         // Reset environment
-        let mut state = env.reset(html, url.clone(), Some(site_profile))?;
+        let mut state = env.reset(
+            html,
+            url.clone(),
+            sample.ground_truth_text.as_deref(),
+            Some(site_profile),
+        )?;
 
         let mut episode_reward = 0.0;
         let mut done = false;
@@ -388,7 +421,7 @@ pub fn train_standard(
 /// Training with improvements (curriculum learning, improved rewards, domain extraction, etc.)
 pub fn train_with_improvements(
     config: &Config,
-    html_samples: Vec<(String, String)>,
+    html_samples: Vec<TrainingSample>,
 ) -> Result<(Box<dyn RLAgent>, TrainingMetrics)> {
     info!("Starting OPTIMIZED training for {} episodes", config.num_episodes);
     info!("Performance settings:");
@@ -436,7 +469,6 @@ pub fn train_with_improvements(
     let mut metrics = TrainingMetrics { episode_rewards: vec![], episode_qualities: vec![], episode_losses: vec![], best_avg_quality: 0.0 };
 
     // Enhanced components
-    let reward_calculator = ImprovedRewardCalculator::new(config.stopwords.clone());
     let mut curriculum = CurriculumManager::new();
     let mut epsilon = config.epsilon_start;
 
@@ -526,7 +558,7 @@ pub fn train_with_improvements(
 
         // Sample HTML (with curriculum filtering)
         let appropriate_samples: Vec<_> = html_samples.iter()
-            .filter(|(html, _)| curriculum.is_appropriate(html))
+            .filter(|s| curriculum.is_appropriate(&s.html))
             .collect();
 
         if appropriate_samples.is_empty() {
@@ -534,8 +566,10 @@ pub fn train_with_improvements(
             break;
         }
 
-        let idx = episode % appropriate_samples.len();
-        let (html, file_path) = appropriate_samples[idx];
+        let idx = rand::rng().random_range(0..appropriate_samples.len());
+        let sample = appropriate_samples[idx];
+        let html = &sample.html;
+        let file_path = &sample.url;
 
         // Extract domain from ground truth JSON
         let domain = extract_domain_from_url(file_path);
@@ -547,12 +581,14 @@ pub fn train_with_improvements(
 
         let site_profile = site_memory.get_profile(&domain);
 
-        // Get baseline score
-        let baseline_result = baseline_extractor.extract(html)?;
-        let baseline_score = baseline_result.quality_score;
-
-        // Reset environment
-        let mut state = env.reset(html, file_path.clone(), Some(site_profile))?;
+        // Reset environment with ground-truth text so the reward is token F1
+        // against the labelled article (falls back to a quality proxy if absent).
+        let mut state = env.reset(
+            html,
+            file_path.clone(),
+            sample.ground_truth_text.as_deref(),
+            Some(site_profile),
+        )?;
 
         let mut episode_reward = 0.0;
         let mut done = false;
@@ -567,10 +603,10 @@ pub fn train_with_improvements(
         // Episode loop
         while !done {
             let action = agent.select_action(&state, epsilon as f32)?;
-            let (next_state, _, is_done, info) = env.step(action.clone())?;
-
-            // Calculate improved reward
-            let reward = reward_calculator.calculate_reward(&info.text, baseline_score);
+            // The environment now computes the reward as token F1 against the
+            // ground-truth article (or a quality proxy when no GT is present),
+            // so the selected node and tuned params actually drive the signal.
+            let (next_state, reward, is_done, info) = env.step(action.clone())?;
 
             episode_reward += reward;
             done = is_done;

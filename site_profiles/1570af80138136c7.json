@@ -1,0 +1,68 @@
+{
+  "domain": "b2b.economictimes.indiatimes.com",
+  "extractions": [
+    {
+      "timestamp": "2026-06-01T23:16:57.571383610Z",
+      "quality_score": 0.75945544,
+      "xpath": "/html[1]/body[1]/div[3]/div[2]",
+      "parameters": {
+        "min_word_threshold": 9.85567855834961,
+        "link_density_penalty": 0.14628642797470093,
+        "sibling_extension": 0.6154782772064209,
+        "depth_penalty": 0.3044748306274414,
+        "stopword_weight": 0.9863765835762024,
+        "paragraph_boost": 1.2002003192901611
+      },
+      "text_length": 3639
+    },
+    {
+      "timestamp": "2026-06-02T00:02:31.148968993Z",
+      "quality_score": 0.75945544,
+      "xpath": "/html[1]/body[1]/div[2]",
+      "parameters": {
+        "sibling_extension": 0.6154782772064209,
+        "paragraph_boost": 1.2002003192901611,
+        "depth_penalty": 0.3044748306274414,
+        "stopword_weight": 0.9863765835762024,
+        "link_density_penalty": 0.14628642797470093,
+        "min_word_threshold": 9.85567855834961
+      },
+      "text_length": 3639
+    }
+  ],
+  "successful_xpaths": {
+    "/html[1]/body[1]/div[2]": 1,
+    "/html[1]/body[1]/div[3]/div[2]": 1
+  },
+  "avg_parameters": {
+    "depth_penalty": [
+      0.3044748306274414,
+      0.3044748306274414
+    ],
+    "min_word_threshold": [
+      9.85567855834961,
+      9.85567855834961
+    ],
+    "link_density_penalty": [
+      0.14628642797470093,
+      0.14628642797470093
+    ],
+    "sibling_extension": [
+      0.6154782772064209,
+      0.6154782772064209
+    ],
+    "stopword_weight": [
+      0.9863765835762024,
+      0.9863765835762024
+    ],
+    "paragraph_boost": [
+      1.2002003192901611,
+      1.2002003192901611
+    ]
+  },
+  "quality_scores": [
+    0.75945544,
+    0.75945544
+  ],
+  "last_updated": "2026-06-02T00:02:31.148971547Z"
+}

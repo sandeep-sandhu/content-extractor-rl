@@ -20,22 +20,20 @@ name = "content-extractor-rl"
 path = "src/main.rs"
 
 [dependencies]
-# !!!! cuda DISABLED for ARM ARCHITECTURE, RE-ENABLE HERE !!!!
-#content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.1", features = ["cuda", "mlflow-rs"] }
-content-extractor-rl = { path = "../content-extractor-rl", version = "0.1.1", features = ["mlflow-rs"] }
+content-extractor-rl = { path = "../content-extractor-rl", features = ["cuda", "mlflow-rs"] }
 clap.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde_json.workspace = true
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.52", features = ["full"] }
 walkdir = "2.5"
-indicatif = "0.18.3"
+indicatif = "0.18.4"
 bzip2 = "0.6.1"
 rand.workspace = true
-tracing-appender = "0.2.4"
+tracing-appender = "0.2.5"
 chrono = { version = "0.4", features = ["serde"] }
-rayon = "1.11.0"
+rayon = "1.12.0"
 algorithm = "0.1.18"
 
 [features]
